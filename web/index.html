@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>GTA VI · 欢迎来到莱昂尼达</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="wallpaper" aria-label="GTA VI 发售日倒计时壁纸">
+    <div class="backdrop" aria-hidden="true"></div>
+    <div class="characters" id="characters" aria-hidden="true"></div>
+    <div class="logo-glow" aria-hidden="true"><div class="logo-glow__halo"></div><div class="logo-glow__edge"></div></div>
+    <div class="readability" aria-hidden="true"></div>
+    <div class="ambient" aria-hidden="true"></div>
+    <div class="dust" aria-hidden="true">
+      <i style="--x:7%;--y:73%;--delay:-8s;--duration:24s"></i>
+      <i style="--x:14%;--y:88%;--delay:-13s;--duration:31s"></i>
+      <i style="--x:26%;--y:69%;--delay:-3s;--duration:27s"></i>
+      <i style="--x:34%;--y:94%;--delay:-22s;--duration:29s"></i>
+      <i style="--x:43%;--y:83%;--delay:-9s;--duration:33s"></i>
+      <i style="--x:55%;--y:91%;--delay:-16s;--duration:25s"></i>
+      <i style="--x:68%;--y:77%;--delay:-5s;--duration:30s"></i>
+      <i style="--x:79%;--y:96%;--delay:-18s;--duration:28s"></i>
+      <i style="--x:89%;--y:71%;--delay:-11s;--duration:34s"></i>
+      <i style="--x:96%;--y:89%;--delay:-23s;--duration:26s"></i>
+    </div>
+
+    <aside class="clock" id="clock" aria-label="北京时间">
+      <div class="clock__time" id="clock-time">00:00</div>
+      <div class="clock__date" id="clock-date">10月15日 星期四</div>
+      <div class="clock__zone">BEIJING · UTC+8</div>
+    </aside>
+
+    <section class="countdown" id="countdown" aria-label="距离计划发售日">
+      <p class="countdown__intro" id="intro">欢迎来到莱昂尼达，还有</p>
+      <div class="digits" role="timer" aria-live="off">
+        <div class="digit"><span class="digit__number" id="days">00</span><span class="digit__label">天</span></div>
+        <div class="digit"><span class="digit__number" id="hours">00</span><span class="digit__label">时</span></div>
+        <div class="digit"><span class="digit__number" id="minutes">00</span><span class="digit__label">分</span></div>
+        <div class="digit"><span class="digit__number" id="seconds">00</span><span class="digit__label">秒</span></div>
+      </div>
+      <div class="progress" id="progress" role="progressbar" aria-label="自首支预告公布起的等待进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress__fill" id="progress-fill"></div>
+      </div>
+      <p class="countdown__progress" id="progress-text">已完成 0.0%</p>
+      <p class="countdown__target" id="target-date">2026年11月19日 — 00:00 GMT+8</p>
+      <p class="countdown__note" id="target-note">港区 PS5 · PS Store 列示时间</p>
+    </section>
+  </main>
+</body>
+</html>

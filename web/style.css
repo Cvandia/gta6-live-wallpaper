@@ -1,0 +1,241 @@
+@font-face {
+  font-family: Anton;
+  src: url("assets/Anton-Regular.ttf") format("truetype");
+  font-display: swap;
+  font-weight: 400;
+  font-style: normal;
+}
+
+:root {
+  --accent: #ff25c2;
+  --accent-soft: #ff83d2;
+  --text-scale: 1;
+  --content-width: 35vw;
+  --number-size: min(6.25vw, 11.3vh);
+  --small-size: min(1.1vw, 2vh);
+  --intro-size: min(1.15vw, 2.1vh);
+  --scene-position: 50% 50%;
+  /* Every layer uses the original 3840×2160 canvas, even if an extracted PNG is smaller. */
+  --scene-width: max(100vw, 177.77777778vh);
+  --scene-height: max(56.25vw, 100vh);
+  --parallax-x: 0px;
+  --glow-opacity: .65;
+}
+
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body {
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color: #fffafc;
+  background: #514075;
+  user-select: none;
+  cursor: default;
+}
+
+.wallpaper, .backdrop, .characters, .logo-glow, .readability, .ambient, .dust { position: absolute; inset: 0; }
+.wallpaper { isolation: isolate; overflow: hidden; }
+.backdrop {
+  z-index: -6;
+  background: url("assets/background.jpg") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat;
+}
+.is-layered .backdrop { background-image: url("assets/scene-background.jpg"); }
+.characters {
+  z-index: -5;
+  display: none;
+  pointer-events: none;
+  background: url("assets/characters.png") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat;
+  transform: translate3d(var(--parallax-x), 0, 0);
+  will-change: transform;
+}
+.is-layered .characters { display: block; }
+.logo-glow { z-index: -4; display: none; pointer-events: none; }
+.has-logo-mask .logo-glow { display: block; }
+.logo-glow__halo, .logo-glow__edge {
+  position: absolute;
+  inset: 0;
+}
+/* Blur the masked child from its unmasked parent so light can extend outside the VI contour. */
+.logo-glow__halo::before, .logo-glow__edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, #ff4dbf 4%, #ffa2df 24%, #94d5ff 42%, #eac3ff 59%, #ff3da8 77%, #ffb5e4 96%);
+  background-size: 260% 100%;
+  -webkit-mask: url("assets/logo-mask.png") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat;
+  mask: url("assets/logo-mask.png") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat;
+  animation: neon-flow 16s ease-in-out infinite alternate, neon-breathe 8.7s linear infinite;
+}
+.logo-glow__halo { filter: blur(max(3px, .36vw)); }
+.logo-glow__edge { filter: blur(max(.6px, .06vw)); }
+.logo-glow__edge::before { animation-delay: -3.1s, -1.8s; }
+.readability {
+  z-index: -3;
+  background: linear-gradient(90deg, rgb(36 24 73 / 9%) 0%, transparent 47%),
+    radial-gradient(ellipse 43% 38% at 20% 78%, rgb(44 30 70 / 12%), transparent 100%);
+}
+.ambient {
+  z-index: -2;
+  pointer-events: none;
+  background: radial-gradient(ellipse 42% 23% at 9% 65%, rgb(255 83 188 / 8%), transparent 100%),
+    radial-gradient(ellipse 32% 33% at 92% 60%, rgb(255 162 190 / 6%), transparent 100%);
+  animation: sunset 14s ease-in-out infinite alternate;
+}
+.dust { z-index: -1; pointer-events: none; }
+.dust i {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: max(1px, .12vw);
+  height: max(1px, .12vw);
+  border-radius: 50%;
+  background: #ffe5f3;
+  opacity: 0;
+  box-shadow: 0 0 6px rgb(255 233 247 / 20%);
+  animation: drift var(--duration) linear var(--delay) infinite;
+}
+
+.clock {
+  position: absolute;
+  top: 4.3%;
+  right: 3.2%;
+  text-align: right;
+  text-shadow: 0 2px 8px rgb(37 20 57 / 24%);
+  transform: scale(var(--text-scale));
+  transform-origin: top right;
+}
+.clock__time {
+  font-family: Anton, "Arial Narrow", sans-serif;
+  font-size: min(3.1vw, 5.6vh);
+  font-weight: 400;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.015em;
+}
+.clock__time, .digit__number { position: relative; isolation: isolate; }
+.clock__time::before, .digit__number::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: transparent;
+  background: linear-gradient(105deg, #ff5acb 0%, #ffa5e5 22%, #9cddff 46%, #e1baff 66%, #ff4dbf 88%, #ffb4e8 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: .012em transparent;
+  filter: blur(.027em);
+  transform: scale(1.025, 1.045);
+  animation: neon-flow 16s ease-in-out infinite alternate, neon-breathe 8.7s linear -2s infinite;
+  pointer-events: none;
+}
+.digit:nth-child(2) .digit__number::before { animation-delay: -2s, -2.8s; }
+.digit:nth-child(3) .digit__number::before { animation-delay: -4s, -3.6s; }
+.digit:nth-child(4) .digit__number::before { animation-delay: -6s, -4.4s; }
+.clock__date { margin-top: .65vh; font-size: min(.91vw, 1.65vh); font-weight: 650; letter-spacing: .045em; }
+.clock__zone { margin-top: .55vh; font-size: min(.49vw, .9vh); font-weight: 600; letter-spacing: .2em; opacity: .53; }
+
+.countdown {
+  position: absolute;
+  left: 6.2%;
+  top: 55%;
+  width: var(--content-width);
+  transform: scale(var(--text-scale));
+  transform-origin: top left;
+  text-shadow: 0 2px 9px rgb(66 27 77 / 18%);
+}
+.countdown__intro {
+  margin: 0 0 1.9vh;
+  font-size: var(--intro-size);
+  font-weight: 650;
+  letter-spacing: .14em;
+  line-height: 1.5;
+  color: #ffedf5;
+}
+.digits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 1.2vw; width: 100%; }
+.digit { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.digit__number {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-family: Anton, Impact, "Arial Narrow", sans-serif;
+  font-size: var(--number-size);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -.015em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.digit__label { margin-top: 1.5vh; font-size: var(--small-size); line-height: 1.2; font-weight: 650; opacity: .78; }
+.progress {
+  margin-top: 3.15vh;
+  width: 84%;
+  height: max(2px, .34vh);
+  background: rgb(245 225 255 / 17%);
+  border-radius: 99px;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgb(255 37 194 / 9%);
+}
+.progress__fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); border-radius: inherit; }
+.countdown__progress { margin: 1.45vh 0 0; font-size: min(.92vw, 1.65vh); color: #ffdfed; font-weight: 600; letter-spacing: .02em; opacity: .77; }
+.countdown__target { margin: 2.2vh 0 0; font-size: var(--small-size); color: #fff2f6; font-weight: 650; letter-spacing: .015em; }
+.countdown__note { margin: .75vh 0 0; font-size: min(.66vw, 1.15vh); font-weight: 500; letter-spacing: .05em; opacity: .48; }
+.is-released .countdown__note { color: #ffe5f4; opacity: .8; }
+.effects-off .ambient, .effects-off .dust, .effects-off .logo-glow,
+.neon-off .logo-glow, .reduced-motion .logo-glow { display: none; }
+.effects-off .clock__time::before, .effects-off .digit__number::before,
+.neon-off .clock__time::before, .neon-off .digit__number::before,
+.reduced-motion .clock__time::before, .reduced-motion .digit__number::before { display: none; }
+.is-paused *, .is-paused *::before, .is-paused *::after { animation-play-state: paused !important; }
+.clock[hidden] { display: none; }
+
+@keyframes sunset { from { opacity: .42; } to { opacity: 1; } }
+@keyframes neon-flow { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+/* Soft breathing plus tiny irregular fluctuations: the outline never flashes off. */
+@keyframes neon-breathe {
+  0%, 100% { opacity: calc(var(--glow-opacity) * .66); }
+  23% { opacity: calc(var(--glow-opacity) * .93); }
+  27% { opacity: calc(var(--glow-opacity) * .85); }
+  31% { opacity: calc(var(--glow-opacity) * .96); }
+  52% { opacity: var(--glow-opacity); }
+  68% { opacity: calc(var(--glow-opacity) * .78); }
+  72% { opacity: calc(var(--glow-opacity) * .84); }
+  82% { opacity: calc(var(--glow-opacity) * .71); }
+}
+@keyframes drift {
+  0% { opacity: 0; transform: translate3d(0, 0, 0); }
+  12% { opacity: .28; }
+  78% { opacity: .18; }
+  100% { opacity: 0; transform: translate3d(2vw, -31vh, 0); }
+}
+
+/* A wide screen leaves the original art intact around the protagonists. */
+@media (min-aspect-ratio: 2/1) {
+  :root { --content-width: 31vw; --number-size: min(5.4vw, 11.3vh); }
+  :root { --scene-position: 50% 40%; }
+  .countdown { left: 5.3%; }
+}
+/* Compact monitors keep the timer in the unobstructed lower left. */
+@media (max-aspect-ratio: 3/2) {
+  :root { --content-width: 42vw; --number-size: min(7vw, 9.8vh); --intro-size: min(1.55vw, 1.85vh); --small-size: min(1.4vw, 1.7vh); }
+  :root { --scene-position: 43% 50%; }
+  .countdown { left: 4.5%; top: 58%; }
+  .digits { column-gap: .7vw; }
+  .countdown__progress { font-size: 1.3vw; }
+  .countdown__note { font-size: 1vw; }
+}
+@media (max-aspect-ratio: 1/1) {
+  :root { --content-width: 83vw; --number-size: 13vw; --intro-size: 2.7vw; --small-size: 2.5vw; }
+  :root { --scene-position: 57% 50%; }
+  .countdown { left: 7%; top: auto; bottom: 7%; transform-origin: bottom left; }
+  .clock__time { font-size: 7vw; }
+  .clock__date { font-size: 2.1vw; }
+  .clock__zone { font-size: 1.3vw; }
+  .countdown__progress { font-size: 2.2vw; }
+  .countdown__note { font-size: 1.6vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The explicit user property controls whether the wallpaper follows this system preference. */
+  .reduced-motion .ambient, .reduced-motion .dust, .reduced-motion.has-logo-mask .logo-glow,
+  .reduced-motion .clock__time::before, .reduced-motion .digit__number::before { display: none; }
+  .reduced-motion .characters { transform: none; }
+}

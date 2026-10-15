@@ -1,0 +1,19 @@
+[project]
+name = "gta6-live-wallpaper"
+version = "1.1.0"
+description = "GTA VI Beijing countdown wallpaper with neon glow and mouse parallax"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = "MIT"
+authors = [{ name = "Cvandia" }]
+dependencies = ["PySide6-Essentials==6.12.0"]
+
+[project.urls]
+Repository = "https://github.com/Cvandia/gta6-live-wallpaper"
+Issues = "https://github.com/Cvandia/gta6-live-wallpaper/issues"
+
+[dependency-groups]
+build = ["pyinstaller==6.22.3", "pillow==12.3.0"]
+
+[tool.uv]
+package = false

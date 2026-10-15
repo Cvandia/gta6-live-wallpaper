@@ -1,0 +1,46 @@
+{
+  "checked_on": "2026-10-15",
+  "game": "Grand Theft Auto VI",
+  "release": {
+    "official_date": "2026-11-19",
+    "official_url": "https://www.rockstargames.com/VI",
+    "region": "Hong Kong PlayStation Store",
+    "release_utc": "2026-11-18T16:00:00Z",
+    "release_beijing": "2026-11-19T00:00:00+08:00",
+    "source_url": "https://store.playstation.com/zh-hans-hk/product/EP1004-PPSA01547_00-GTAVISTANDARD001",
+    "note": "Region-specific PS5 digital release listing; other storefront regions may unlock at different UTC instants."
+  },
+  "artwork": {
+    "title": "Jason and Lucia Robbery (With Logo)",
+    "creator": "Rockstar Games",
+    "official_gallery": "https://www.rockstargames.com/VI/media/artwork-wallpapers",
+    "image_url": "https://www.rockstargames.com/VI/_next/static/media/Jason_and_Lucia_Robbery_With_Logo_landscape.0sjdgaq91u2yn.jpg",
+    "width": 3840,
+    "height": 2160,
+    "dimension_evidence": "Downloaded official JPG; Pillow verified actual dimensions 3840×2160.",
+    "backup_url": "https://www.gtavice.net/content/images/jason-and-lucia-robbery-with-logo-landscape.jpg",
+    "backup_metadata_url": "https://www.gtavice.net/images/jason-and-lucia-robbery-with-logo-landscape",
+    "rights": "Artwork and trademarks belong to Rockstar Games / Take-Two Interactive.",
+    "sha256": "d2f83c04c297860eb19e6d6979b72e974cc5d9e12705103f1c01f20badab24fa"
+  },
+  "font": {
+    "name": "Anton",
+    "source": "https://github.com/google/fonts/tree/main/ofl/anton",
+    "license": "SIL Open Font License 1.1"
+  },
+  "layers": {
+    "characters.png": {
+      "width": 1672,
+      "height": 941,
+      "method": "Built-in imagegen edit of official artwork",
+      "sha256": "387fd08c190e2c6d60d52934412703b4944b47b23c20e0a73978ef3746227ef6"
+    },
+    "scene-background.jpg": {
+      "width": 1672,
+      "height": 941,
+      "method": "Built-in imagegen edit of official artwork",
+      "sha256": "19aa20d0c301ba3bbcb04bfd3b9a4cd0631567610526e942ce315d5124cbe075"
+    },
+    "notes": "Generated layers are not native 4K. Original 3840x2160 artwork remains fallback; exact prompts in docs/图层素材说明.md."
+  }
+}

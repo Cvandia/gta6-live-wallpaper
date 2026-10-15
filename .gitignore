@@ -218,3 +218,28 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# GTA VI wallpaper build and local-only files
+.venv/
+.uv-cache/
+.pyinstaller-cache/
+build/
+dist/
+__pycache__/
+*.py[cod]
+*.spec
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+assets/official-page.html
+web/assets/
+tests/*-result.json
+tests/*stdout.txt
+tests/*stderr.txt
+
+.env
+.env.*
+gh-auth/
