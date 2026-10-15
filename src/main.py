@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QSystemTrayIcon,
     QDialog, QVBoxLayout, QFormLayout, QLabel, QCheckBox, QComboBox, QDateTimeEdit,
     QDialogButtonBox, QMessageBox, QSlider)
 
-from model import BEIJING, DEFAULT_TARGET, RELEASE_SOURCE, ART_SOURCE, parse_target, snapshot
+from model import BEIJING, DEFAULT_TARGET, RELEASE_SOURCE, ART_SOURCE, parse_target, snapshot, format_target
 from effects import cursor_target, smooth_position, glow_pulse
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
@@ -468,7 +468,7 @@ class Wallpaper(QWidget):
         p.setBrush(accent)
         p.drawRoundedRect(QRectF(x, bar_y, bar_w*state["progress"], 5*ui), 2.5*ui, 2.5*ui)
         self.text(p, QRectF(x, bar_y+17*ui, available, 30*ui), f"已完成 {state['progress']*100:.1f}%" if not state["released"] else "计划发售日已到 · 以商店实际解锁为准", 15*ui, color="#e7c5e0")
-        target_text = self.target.strftime("%Y年%m月%d日 — %H:%M GMT+8")
+        target_text = format_target(self.target)
         self.text(p, QRectF(x, bar_y+62*ui, available+120*ui, 32*ui), target_text, 18*ui, bold=True, color="#fae7f5")
         custom = self.config["target"] != DEFAULT_TARGET
         self.text(p, QRectF(x, bar_y+97*ui, available+150*ui, 26*ui), "自定义目标 · 北京时间" if custom else "港区 PS5 · PS Store 列示时间", 12*ui, color="#d9b8d5")

@@ -3,10 +3,19 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from model import DEFAULT_TARGET, START, parse_target, snapshot
+from model import DEFAULT_TARGET, START, parse_target, snapshot, format_target
 
 
 class CountdownTest(unittest.TestCase):
+    def test_chinese_date_label_under_c_locale(self):
+        import locale
+        previous=locale.setlocale(locale.LC_TIME)
+        try:
+            locale.setlocale(locale.LC_TIME,"C")
+            self.assertEqual(format_target(parse_target(DEFAULT_TARGET)),"2026年11月19日 — 00:00 GMT+8")
+        finally:
+            locale.setlocale(locale.LC_TIME,previous)
+
     def test_store_utc_is_beijing_midnight(self):
         self.assertEqual(parse_target(DEFAULT_TARGET), datetime(2026,11,18,16,tzinfo=timezone.utc))
 

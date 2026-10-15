@@ -18,6 +18,12 @@ def parse_target(value: str) -> datetime:
     return result.astimezone(BEIJING)
 
 
+def format_target(value: datetime) -> str:
+    """Avoid platform strftime encodings for Chinese text on English Windows."""
+    target=value.astimezone(BEIJING)
+    return f"{target.year}年{target.month:02d}月{target.day:02d}日 — {target.hour:02d}:{target.minute:02d} GMT+8"
+
+
 def snapshot(now: datetime, target: datetime) -> dict:
     if now.tzinfo is None or target.tzinfo is None:
         raise ValueError("必须使用包含时区的时间")

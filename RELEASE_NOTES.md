@@ -1,4 +1,6 @@
-GTA VI 倒计时壁纸 v1.1.0
+GTA VI 倒计时壁纸 v1.1.1
+
+- 修复英文 Windows 区域设置下中文发售日期无法绘制的问题，并增加 C locale 回归测试。
 
 - VI 标志增加粉紫至青色渐变外轮廓，配合呼吸和轻微忽闪。
 - 倒计时数字与右上角北京时间增加同步变化的霓虹发光。
@@ -8,4 +10,4 @@ GTA VI 倒计时壁纸 v1.1.0
 
 官方原画为 3840 × 2160；视差使用的背景补图与透明人物由 ImageGen 辅助生成，实际为 1672 × 941。图层资源不可用时回退到官方静态原图。
 
-下载完整 `GTA6-LiveWallpaper-v1.1.0.zip` 可取得 EXE、Web 壁纸和许可说明；仅需网页壁纸可下载 `GTA6-WallpaperEngine-Web-v1.1.0.zip`。本机尚未完成 Wallpaper Engine 内的最终显示确认。
+下载完整 `GTA6-LiveWallpaper-v1.1.1.zip` 可取得 EXE、Web 壁纸和许可说明；仅需网页壁纸可下载 `GTA6-WallpaperEngine-Web-v1.1.1.zip`。本机尚未完成 Wallpaper Engine 内的最终显示确认。
