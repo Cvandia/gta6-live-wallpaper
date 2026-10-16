@@ -29,9 +29,10 @@ Python 项目由 **uv** 管理虚拟环境和依赖，EXE 用户无需安装 Pyt
 
 ## ✨ 功能
 
-- 💜 **VI 霓虹轮廓**：粉紫至青色的渐变外发光，带缓慢呼吸与轻微忽闪
+- 💜 **VI 霓虹轮廓**：增强粉紫至青色渐变外发光，加入轮廓星芒与高亮粒子，带缓慢呼吸与轻微忽闪
 - ⏱️ **时间光效**：倒计时数字和右上角北京时间同步发光，秒级更新
 - 🖱️ **人物分层视差**：人物随鼠标左右平滑轻移，默认在 1920 像素宽度下最大为 **±12 px**
+- 🧠 **内存优化**：限定位图缓存，按显示大小加载绘图资源，并在设置或缩放变化时释放旧缓存
 - ✨ 漂浮微尘、柔光与粉色进度条
 - ⚙️ 可设置目标时间、光强、视差强度、时钟、帧率与文字大小
 - 🖥️ 支持独立桌面模式与 Wallpaper Engine 导入
@@ -44,7 +45,7 @@ Release 提供 EXE、完整 ZIP 与 Web ZIP。GitHub Actions 会在推送到 `ma
 
 ### EXE 版
 
-下载并解压完整 `GTA6-LiveWallpaper-v1.1.1.zip`，双击 `GTA6Wallpaper.exe` 即可预览。支持 Windows 10 / 11 x64。
+下载并解压完整 `GTA6-LiveWallpaper-v1.2.0.zip`，双击 `GTA6Wallpaper.exe` 即可预览。支持 Windows 10 / 11 x64。
 
 在窗口内右键选择 **“独立设为桌面壁纸”**，可将壁纸放到主屏桌面图标后面。右键托盘的 **VI** 图标可打开设置、返回预览或退出。
 
@@ -57,7 +58,7 @@ Release 提供 EXE、完整 ZIP 与 Web ZIP。GitHub Actions 会在推送到 `ma
 | EXE | `GTA6Wallpaper.exe` | 在“创建壁纸”中按应用程序导入 |
 | Web | `WallpaperEngine-Web/index.html` | 在“创建壁纸”中导入网页入口，保持整个文件夹完整 |
 
-Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.1.1.zip`，在引擎右侧调节属性；EXE 版通过右键菜单或托盘打开设置。独立桌面模式与 Wallpaper Engine 模式选择一种运行即可。
+Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.2.0.zip`，在引擎右侧调节属性；EXE 版通过右键菜单或托盘打开设置。独立桌面模式与 Wallpaper Engine 模式选择一种运行即可。
 
 ## ⚙️ 设置
 
@@ -65,7 +66,7 @@ Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.1.1.zip`，在引擎右侧�
 | --- | --- |
 | 动态效果 | 开启微尘、柔光等效果 |
 | 霓虹光效 | 开启 VI 与时间的渐变外发光 |
-| 发光强度 | **65%** |
+| 发光强度 | **85%** |
 | 人物视差 | 开启，平滑跟随鼠标左右移动 |
 | 视差强度 | 1920 像素宽度下最大 **±12 px**，按显示宽度缩放 |
 | EXE 动画帧率 | **20 FPS**，可选 **10 / 20 / 30 FPS** |
@@ -73,6 +74,17 @@ Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.1.1.zip`，在引擎右侧�
 | Web 跟随系统减少动态偏好 | 默认关闭，可按需要开启 |
 
 EXE 设置保存在 `%LOCALAPPDATA%/GTA6Wallpaper/settings.json`。关闭视差可让人物停止移动；图层资源不可用时回退到官方静态原画。
+
+EXE 限制绘图位图缓存的数量与大小，按当前显示大小加载绘图资源；调整设置或改变缩放时释放旧缓存，减少长时间运行时的内存占用。
+
+**内存实测：v1.2.0 在增强光效的同时降低了内存占用。**
+
+| 画面尺寸 | v1.1.1 私有提交内存 | v1.2.0 私有提交内存 | 降低约 |
+| --- | ---: | ---: | ---: |
+| 1920 × 1080 | 158.57 MiB | 57.10 MiB | 64% |
+| 3840 × 2160 | 240.23 MiB | 123.04 MiB | 49% |
+
+2026-10-16 在相同 Windows 环境中，对 Qt offscreen 源码进程的固定画面暖机后测量；实际占用随 DPI、窗口尺寸和系统变化，表中数值不代表内存上限。
 
 程序离线运行，使用电脑系统时钟计算倒计时，不受系统选择的时区影响；不会后台校时或自动更改发售日期。
 
@@ -131,10 +143,10 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 输出文件：
 
 - `dist/GTA6Wallpaper.exe`：内置素材、Python 与 Qt 运行库的单文件程序
-- `dist/GTA6-LiveWallpaper-v1.1.1.zip`：EXE、完整 Web 壁纸、说明与第三方许可
-- `dist/GTA6-WallpaperEngine-Web-v1.1.1.zip`：完整网页壁纸与素材
+- `dist/GTA6-LiveWallpaper-v1.2.0.zip`：EXE、完整 Web 壁纸、说明与第三方许可
+- `dist/GTA6-WallpaperEngine-Web-v1.2.0.zip`：完整网页壁纸与素材
 
-GitHub Actions 在推送到 `main` 或手动运行后执行锁定依赖安装、Python / Web 测试及打包，并保存构建产物；首次成功构建会创建 `v1.1.1` Release。
+GitHub Actions 在推送到 `main` 或手动运行后执行锁定依赖安装、Python / Web 测试及打包，并保存构建产物；首次成功构建会创建 `v1.2.0` Release。
 
 ## 📂 项目结构
 

@@ -5,6 +5,7 @@
   const WAIT_START = Date.parse("2023-12-04T18:00:00-05:00");
   const DEFAULT_TARGET_MS = Date.parse(DEFAULT_TARGET);
   const BEIJING_OFFSET = 8 * 60 * 60 * 1000;
+  const PARALLAX_SMOOTH_MS = 145;
   const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
   const pad2 = value => String(value).padStart(2, "0");
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -81,14 +82,30 @@
     return clamp(ratio, -1, 1) * clamp(strength, 0, 25) * viewportWidth / 1920;
   }
 
-  /** Exponential easing gives the same movement at 30, 60 and 144Hz. */
+  /** Keep the original easing response independent of frame timing. */
   function easeParallax(current, desired, elapsedMs) {
     if (![current, desired, elapsedMs].every(Number.isFinite)) return 0;
-    const next = current + (desired - current) * (1 - Math.exp(-clamp(elapsedMs, 0, 100) / 145));
+    const next = current + (desired - current) * (1 - Math.exp(-clamp(elapsedMs, 0, 100) / PARALLAX_SMOOTH_MS));
     return Math.abs(next - desired) < .015 ? desired : next;
   }
 
-  const api = { DEFAULT_TARGET, DEFAULT_TARGET_MS, WAIT_START, BEIJING_OFFSET, pad2, clamp, parseTarget, beijingParts, formatTarget, calculateState, parseAccent, pointerRatio, parallaxOffset, easeParallax };
+  /** Crop only the logo's effect surfaces while retaining the original cover coordinates. */
+  function logoGeometry(viewportWidth, viewportHeight) {
+    if (![viewportWidth, viewportHeight].every(Number.isFinite) || viewportWidth <= 0 || viewportHeight <= 0) return null;
+    const aspect = viewportWidth / viewportHeight;
+    const anchorX = aspect <= 1 ? .57 : (aspect <= 1.5 ? .43 : .5);
+    const anchorY = aspect >= 2 ? .4 : .5;
+    const scale = Math.max(viewportWidth / 3840, viewportHeight / 2160);
+    const sceneWidth = 3840 * scale, sceneHeight = 2160 * scale;
+    return {
+      left: (viewportWidth - sceneWidth) * anchorX + 180 * scale,
+      top: (viewportHeight - sceneHeight) * anchorY + 140 * scale,
+      width: 1255 * scale, height: 980 * scale,
+      maskX: -180 * scale, maskY: -140 * scale
+    };
+  }
+
+  const api = { DEFAULT_TARGET, DEFAULT_TARGET_MS, WAIT_START, BEIJING_OFFSET, PARALLAX_SMOOTH_MS, pad2, clamp, parseTarget, beijingParts, formatTarget, calculateState, parseAccent, pointerRatio, parallaxOffset, easeParallax, logoGeometry };
   root.GTAVIWallpaper = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof document === "undefined") return;
@@ -105,7 +122,7 @@
   let previousFrame = null;
   let mouseRatio = 0;
   let currentOffset = 0;
-  const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: true, parallaxstrength: 12, neon: true, glowstrength: 65, respectreducedmotion: false };
+  const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: true, parallaxstrength: 12, neon: true, glowstrength: 85, respectreducedmotion: false };
 
   function cacheElements() {
     elements = {};
@@ -203,6 +220,15 @@
     if (currentOffset !== desired && frame === null) frame = root.requestAnimationFrame(animateParallax);
   }
 
+  function updateSceneGeometry() {
+    const geometry = logoGeometry(Number(root.innerWidth), Number(root.innerHeight));
+    if (!geometry) return;
+    for (const key of ["left", "top", "width", "height", "maskX", "maskY"]) {
+      const property = key.replace(/[A-Z]/g, character => `-${character.toLowerCase()}`);
+      document.documentElement.style.setProperty(`--logo-${property}`, `${geometry[key].toFixed(3)}px`);
+    }
+  }
+
   function loadSceneLayers() {
     if (typeof root.Image !== "function") return;
     const sources = ["assets/scene-background.jpg", "assets/characters.png", "assets/logo-mask.png"];
@@ -267,6 +293,7 @@
 
   function initialize() {
     cacheElements();
+    updateSceneGeometry();
     if (typeof root.matchMedia === "function") {
       const preference = root.matchMedia("(prefers-reduced-motion: reduce)");
       systemReducedMotion = preference.matches;
@@ -281,7 +308,7 @@
       syncMotion();
     }, { passive: true });
     document.addEventListener("mouseleave", () => { mouseRatio = 0; syncMotion(); });
-    if (typeof root.addEventListener === "function") root.addEventListener("resize", syncMotion, { passive: true });
+    if (typeof root.addEventListener === "function") root.addEventListener("resize", () => { updateSceneGeometry(); syncMotion(); }, { passive: true });
     loadSceneLayers();
     scheduleTick();
   }

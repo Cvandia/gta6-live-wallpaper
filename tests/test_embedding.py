@@ -11,8 +11,9 @@ Test a packaged one-file application, optionally using a monitor viewport::
 
 This is an integration harness, not a mock of the embedding implementation. It
 checks the actual HWND relationship, native window styles, initial client area,
-resizing, and shutdown when the host window disappears. Diagnostic JSON and the
-child's stdout/stderr are saved beside this file. It does not change main.py.
+resizing, actual rendered colours, continuing animation, and shutdown when the
+host disappears. Diagnostic JSON, window-only PNG captures, and child stdout/
+stderr are saved beside this file. It does not change main.py.
 """
 
 from __future__ import annotations
@@ -212,7 +213,7 @@ def main() -> int:
     if sys.platform != "win32":
         parser.error("This integration test requires Windows and a graphical desktop.")
 
-    from PySide6.QtCore import QCoreApplication, QEvent, Qt
+    from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
     from PySide6.QtWidgets import QApplication, QWidget
 
     output_dir = Path(__file__).resolve().parent
@@ -225,6 +226,9 @@ def main() -> int:
     app = QApplication.instance() or QApplication([sys.argv[0]])
     app.setQuitOnLastWindowClosed(False)
     parent = QWidget()
+    # Keep only our test host unobscured while capturing its own client area.
+    # No activation, mouse input, or screen outside that window is requested.
+    parent.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
     parent.setWindowTitle(f"GTA VI embedding test host · {os.getpid()}")
     parent.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
     parent.resize(960, 540)
@@ -275,6 +279,86 @@ def main() -> int:
             return False
         rect = native.rectangle_in_parent(child_hwnd, parent_hwnd)
         return all(abs(actual - expected) <= 2 for actual, expected in zip(rect, expected_region()))
+
+    def settle(seconds: float) -> None:
+        deadline = time.monotonic()+seconds
+        while time.monotonic() < deadline:
+            require(process is not None and process.poll() is None,
+                    "Child exited while waiting for a rendered frame.")
+            pump()
+
+    def capture_child(stage: str):
+        # This captures only the HWND created by this harness's child process.
+        # QWidget.grab() would repaint the host without a foreign native child,
+        # so use the screen's window capture to see the presented GL surface.
+        image = parent.screen().grabWindow(child_hwnd).toImage()
+        require(not image.isNull() and image.width() >= 200 and image.height() >= 100,
+                f"Unable to capture the child window for {stage}.")
+        path = output_dir / f"{output_prefix}-render-{stage}.png"
+        require(image.save(str(path)), f"Unable to save {path.name}.")
+        # Foreign GL child surfaces are sometimes absent from window-DC grabs.
+        # Keep that diagnostic and independently capture the actual displayed
+        # host client rectangle. The capture excludes every other screen area.
+        parent_image = parent.screen().grabWindow(parent_hwnd).toImage()
+        parent_path = output_dir / f"{output_prefix}-render-parent-{stage}.png"
+        parent_image.save(str(parent_path))
+        origin = parent.mapToGlobal(QPoint(0, 0))
+        presented = parent.screen().grabWindow(0, origin.x(), origin.y(),
+                                              parent.width(), parent.height()).toImage()
+        x, y, width, height = native.rectangle_in_parent(child_hwnd, parent_hwnd)
+        shown_child = presented.copy(QRect(x, y, width, height))
+        shown_path = output_dir / f"{output_prefix}-render-presented-{stage}.png"
+        require(shown_child.save(str(shown_path)), f"Unable to save {shown_path.name}.")
+        dc_stats, presented_stats = frame_stats(image), frame_stats(shown_child)
+        # A locked/remote desktop can return black for screen-0 rectangles even
+        # when the application's own window DC remains readable. Retain both
+        # diagnostics and use the richer, app-owned image for the assertion.
+        prefer_presented = presented_stats["colour_bins"] > dc_stats["colour_bins"]
+        result.setdefault("capture_diagnostics", []).append({
+            "stage": stage, "window_dc_path": str(path), "parent_dc_path": str(parent_path),
+            "presented_client_path": str(shown_path), "window_dc_stats": dc_stats,
+            "presented_stats": presented_stats,
+            "assertion_capture": "presented_client" if prefer_presented else "child_window_dc",
+        })
+        return (shown_child, str(shown_path)) if prefer_presented else (image, str(path))
+
+    def frame_stats(image) -> dict:
+        thumbnail = image.scaled(192, 108, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                 Qt.TransformationMode.SmoothTransformation)
+        pixels = [thumbnail.pixelColor(x, y) for y in range(thumbnail.height())
+                  for x in range(thumbnail.width())]
+        count = len(pixels)
+        return {
+            "pixel_size": [image.width(), image.height()],
+            "nonblack_fraction": sum(max(c.red(), c.green(), c.blue()) > 28 for c in pixels)/count,
+            "colour_bins": len({(c.red()//16, c.green()//16, c.blue()//16) for c in pixels}),
+            "saturated_fraction": sum(max(c.red(), c.green(), c.blue())-
+                                      min(c.red(), c.green(), c.blue()) > 25 for c in pixels)/count,
+        }
+
+    def logo_change(first, second) -> dict:
+        require(first.size() == second.size(), "Child capture size changed between animation samples.")
+        # The logo lies in this region, away from countdown digits and the
+        # clock.  Their ordinary one-second updates must not pass this check.
+        width, height = first.width(), first.height()
+        roi = QRect(round(width*.04), round(height*.055),
+                    round(width*.355), round(height*.475))
+        a = first.copy(roi).scaled(384, 288, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+        b = second.copy(roi).scaled(a.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+        changed = total = 0
+        samples = a.width()*a.height()
+        for y in range(a.height()):
+            for x in range(a.width()):
+                ca, cb = a.pixelColor(x, y), b.pixelColor(x, y)
+                differences = (abs(ca.red()-cb.red()), abs(ca.green()-cb.green()),
+                               abs(ca.blue()-cb.blue()))
+                changed += max(differences) >= 3
+                total += sum(differences)
+        return {"roi": [roi.x(), roi.y(), roi.width(), roi.height()],
+                "changed_fraction": changed/samples,
+                "mean_channel_delta": total/(samples*3)}
 
     output_prefix = "embedding" + ("-exe" if args.exe else "") + ("-viewport" if args.viewport else "")
     stdout_path = output_dir / f"{output_prefix}-child.stdout.txt"
@@ -340,6 +424,29 @@ def main() -> int:
             wait_for(matches_expected_region, 10.0, "Child bounds after host resize do not match the requested region.")
             record("child preserves viewport after host resize" if args.viewport else "child follows host resize", host_client=list(native.client_size(parent_hwnd)), child_bounds=list(native.rectangle_in_parent(child_hwnd, parent_hwnd)), expected_bounds=list(expected_region()))
             result["last_observed_windows"] = native.windows_for_process(process.pid, parent_hwnd)
+
+            settle(1.1)
+            first_image, first_path = capture_child("first")
+            first_stats = frame_stats(first_image)
+            result["first_frame"] = {"path": first_path, **first_stats}
+            require(first_stats["nonblack_fraction"] > .80 and first_stats["colour_bins"] >= 90
+                    and first_stats["saturated_fraction"] > .30,
+                    f"Embedded child is black/blank or lacks wallpaper colours: {first_stats}")
+            record("rendered wallpaper remains visible after host resize", **first_stats, path=first_path)
+
+            settle(1.25)
+            second_image, second_path = capture_child("second")
+            second_stats = frame_stats(second_image)
+            result["second_frame"] = {"path": second_path, **second_stats}
+            require(second_stats["nonblack_fraction"] > .80 and second_stats["colour_bins"] >= 90
+                    and second_stats["saturated_fraction"] > .30,
+                    f"Embedded child lost its rendered surface: {second_stats}")
+            changes = logo_change(first_image, second_image)
+            result["animation_change"] = changes
+            require(changes["changed_fraction"] > .001 and changes["mean_channel_delta"] > .03,
+                    f"Logo light/particles did not animate after native parenting and resize: {changes}")
+            record("logo effects continue animating inside native host", **changes,
+                   first_path=first_path, second_path=second_path)
 
             parent.close()
             wait_for(lambda: not native.user32.IsWindow(parent_hwnd), 5.0, "Host HWND was not destroyed on close.")

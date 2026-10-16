@@ -6,7 +6,6 @@ import logging
 import math
 import os
 from pathlib import Path
-import random
 import sys
 import time
 from datetime import datetime
@@ -14,19 +13,21 @@ from datetime import datetime
 from PySide6.QtCore import Qt, QTimer, QRectF, QPointF, QDateTime, QUrl
 from PySide6.QtGui import (QColor, QPainter, QPixmap, QFont, QFontDatabase, QFontMetricsF,
                            QLinearGradient, QRadialGradient, QIcon, QDesktopServices, QCursor,
-                           QPainterPath, QPen)
+                           QPainterPath, QPen, QImageReader)
 from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QSystemTrayIcon,
     QDialog, QVBoxLayout, QFormLayout, QLabel, QCheckBox, QComboBox, QDateTimeEdit,
     QDialogButtonBox, QMessageBox, QSlider)
 
 from model import BEIJING, DEFAULT_TARGET, RELEASE_SOURCE, ART_SOURCE, parse_target, snapshot, format_target
 from effects import cursor_target, smooth_position, glow_pulse
+from visuals import WallpaperVisuals
+from memory import load_scaled_pixmap
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 ASSETS = ROOT / "assets"
 TITLE = "GTA VI · 北京时间倒计时"
 DEFAULTS = dict(target=DEFAULT_TARGET, effects=True, clock=True, fps=20, text_scale=100,
-                neon=True, glow_strength=65, parallax=True, parallax_strength=12)
+                neon=True, glow_strength=85, parallax=True, parallax_strength=12)
 
 
 class SettingsDialog(QDialog):
@@ -96,7 +97,7 @@ class SettingsDialog(QDialog):
         self.date.setDateTime(QDateTime.fromString("2026-11-19 00:00:00", "yyyy-MM-dd HH:mm:ss"))
         self.effects.setChecked(True)
         self.neon.setChecked(True)
-        self.glow.setValue(65)
+        self.glow.setValue(85)
         self.parallax.setChecked(True)
         self.motion.setValue(12)
         self.clock.setChecked(True)
@@ -144,17 +145,15 @@ class Wallpaper(QWidget):
         self.config["glow_strength"] = min(100, max(0, self.config["glow_strength"]))
         self.config["parallax_strength"] = min(25, max(0, self.config["parallax_strength"]))
         self.target = parse_target(self.config["target"])
-        self.bg = QPixmap(str(ASSETS / "background.jpg"))
-        if self.bg.isNull():
+        # Read dimensions without retaining the full 4K promotional bitmap.
+        self.art_size = QImageReader(str(ASSETS / "background.jpg")).size()
+        if not self.art_size.isValid():
             raise RuntimeError("缺少背景原画，请重新解压完整文件包")
-        self.scene = QPixmap(str(ASSETS / "scene-background.jpg"))
-        self.characters = QPixmap(str(ASSETS / "characters.png"))
-        self.logo_mask = QPixmap(str(ASSETS / "logo-mask.png"))
-        self.logo_glow = QPixmap(str(ASSETS / "logo-glow-mask.png"))
-        self.layers_ready = not self.scene.isNull() and not self.characters.isNull()
+        self.layers_ready = all(QImageReader(str(ASSETS / name)).canRead()
+                                for name in ("scene-background.jpg", "characters.png"))
+        self.visuals = WallpaperVisuals.from_assets(ASSETS)
         self.background_cache = None
         self.foreground_cache = None
-        self.logo_cache = None
         self.text_paths = {}
         self.started = time.monotonic()
         self.last_frame = self.started
@@ -164,8 +163,6 @@ class Wallpaper(QWidget):
         self.frozen_now = parse_target(args.at) if args.at else None
         self.hover = False
         self.paused = False
-        rng = random.Random(6)
-        self.particles = [(rng.random(), rng.random(), rng.uniform(.4, 1.8), rng.uniform(.007, .023)) for _ in range(24)]
         self.numbers = "Anton"
         if (ASSETS / "Anton-Regular.ttf").exists():
             fid = QFontDatabase.addApplicationFont(str(ASSETS / "Anton-Regular.ttf"))
@@ -210,6 +207,8 @@ class Wallpaper(QWidget):
                 self.config_path.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
             except OSError as error:
                 QMessageBox.warning(dialog, "设置未能保存", str(error))
+            self.visuals.invalidate()
+            self.text_paths.clear()
             self.animation.setInterval(round(1000 / self.config["fps"]))
             self.update()
 
@@ -326,7 +325,7 @@ class Wallpaper(QWidget):
                 bounds = glyph.boundingRect()
                 glyph.translate(rect.width()/2-bounds.center().x(), rect.height()/2-bounds.center().y())
                 # Bounded cache: seconds and hours repeat; font/viewport changes invalidate it.
-                if len(self.text_paths) > 512:
+                if len(self.text_paths) > 96:
                     self.text_paths.clear()
                 self.text_paths[key] = glyph
             path = self.text_paths[key]
@@ -360,68 +359,41 @@ class Wallpaper(QWidget):
         return g
 
     def paint_logo(self, p, key, target):
-        if self.logo_mask.isNull() or not self.config["neon"] or not self.config["effects"]:
-            return
-        if self.logo_cache is None or self.logo_cache[0] != key:
-            # Only the logo's upper-left quarter is shaded every frame.
-            crop_w, crop_h = self.logo_mask.width()*.405, self.logo_mask.height()*.54
-            dest = QRectF(target.x(), target.y(), target.width()*.405, target.height()*.54)
-            dpr = self.devicePixelRatioF()
-            masks = []
-            for source in (self.logo_mask, self.logo_glow):
-                if source.isNull():
-                    masks.append(None)
-                    continue
-                mask = source.copy(0, 0, round(crop_w), round(crop_h)).scaled(round(dest.width()*dpr), round(dest.height()*dpr), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                mask.setDevicePixelRatio(dpr)
-                masks.append(mask)
-            self.logo_cache = (key, dest, masks)
-        _, dest, masks = self.logo_cache
-        for mask, opacity in zip(masks, (.85, .65)):
-            if mask is None:
-                continue
-            tinted = QPixmap(mask.size())
-            tinted.setDevicePixelRatio(mask.devicePixelRatioF())
-            tinted.fill(Qt.GlobalColor.transparent)
-            mp = QPainter(tinted)
-            mp.fillRect(QRectF(0, 0, dest.width(), dest.height()), self.neon_gradient(dest.width(), dest.height()))
-            mp.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-            mp.drawPixmap(0, 0, mask)
-            mp.end()
-            p.save()
-            p.setOpacity(opacity*self.config["glow_strength"]/100*glow_pulse(self.animation_time))
-            p.drawPixmap(dest.topLeft(), tinted)
-            p.restore()
+        if self.config["neon"] and self.config["effects"]:
+            self.visuals.paint_logo(p, target, self.animation_time,
+                                   self.config["glow_strength"]/100, self.devicePixelRatioF())
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
         cache_key = (w, h, self.devicePixelRatioF())
-        ratio = max(w/self.bg.width(), h/self.bg.height())
-        iw, ih = self.bg.width()*ratio, self.bg.height()*ratio
+        ratio = max(w/self.art_size.width(), h/self.art_size.height())
+        iw, ih = self.art_size.width()*ratio, self.art_size.height()*ratio
         target = QRectF((w-iw)/2, (h-ih)/2, iw, ih)
         if not self.background_cache or self.background_cache[0] != cache_key:
             pix = QPixmap(round(w*self.devicePixelRatioF()), round(h*self.devicePixelRatioF()))
             pix.setDevicePixelRatio(self.devicePixelRatioF())
             bp = QPainter(pix)
             bp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            base = self.scene if self.layers_ready else self.bg
+            name = "scene-background.jpg" if self.layers_ready else "background.jpg"
+            base = load_scaled_pixmap(ASSETS / name, iw, ih, self.devicePixelRatioF())
             bp.drawPixmap(target, base, QRectF(base.rect()))
             bp.end()
             self.background_cache = (cache_key, pix)
         p.drawPixmap(0, 0, self.background_cache[1])
         if self.layers_ready:
             if self.foreground_cache is None or self.foreground_cache[0] != cache_key:
-                scaled = self.characters.scaled(round(iw*self.devicePixelRatioF()), round(ih*self.devicePixelRatioF()), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                scaled.setDevicePixelRatio(self.devicePixelRatioF())
+                # Store only the visible half of the transparent character canvas.
+                scaled = load_scaled_pixmap(ASSETS / "characters.png", iw, ih,
+                                            self.devicePixelRatioF(), crop=(.37, 0, .52, 1))
                 self.foreground_cache = (cache_key, scaled)
             amount = self.config["parallax_strength"] * w/1920
             dx = self.parallax_position * amount if self.config["effects"] and self.config["parallax"] else 0
             p.save()
             # Ignore sub-visible alpha residue far away from the extracted people.
             p.setClipRect(QRectF(target.x()+iw*.37+dx, target.y(), iw*.52, ih))
-            p.drawPixmap(QPointF(target.x()+dx, target.y()), self.foreground_cache[1])
+            p.drawPixmap(QPointF(target.x()+iw*.37+dx, target.y()), self.foreground_cache[1])
             p.restore()
         shade = QLinearGradient(0, h*.43, 0, h)
         shade.setColorAt(0, QColor(18, 12, 43, 0))
@@ -435,12 +407,7 @@ class Wallpaper(QWidget):
             glow.setColorAt(0, QColor(255, 77, 193, round(10+4*math.sin(t*.25))))
             glow.setColorAt(1, QColor(255, 89, 170, 0))
             p.fillRect(self.rect(), glow)
-            for x, y, radius, speed in self.particles:
-                py = (y-t*speed*.16) % 1
-                px = (x + .004*math.sin(t*.3+y*10)) % 1
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(255, 225, 246, round(20+25*(.5+.5*math.sin(t*.5+x*15)))))
-                p.drawEllipse(QPointF(px*w, py*h), radius*w/1920, radius*w/1920)
+            self.visuals.paint_particles(p, w, h, t, .85, self.devicePixelRatioF())
         scale = min(w/1920, h/1080)
         ui = scale * self.config["text_scale"]/100
         x = w*.062
@@ -487,7 +454,7 @@ class Wallpaper(QWidget):
     def resizeEvent(self, event):
         self.background_cache = None
         self.foreground_cache = None
-        self.logo_cache = None
+        self.visuals.invalidate()
         self.text_paths.clear()
         super().resizeEvent(event)
 

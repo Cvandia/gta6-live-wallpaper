@@ -29,7 +29,7 @@ function browser(systemReduced = false) {
     addEventListener(name, callback) { events.set(name, callback); }
   };
   const window = {
-    innerWidth: 1920, Image: FakeImage,
+    innerWidth: 1920, innerHeight: 1080, Image: FakeImage,
     setTimeout(callback, delay) { timers.set(++nextId, { callback, delay }); return nextId; },
     clearTimeout(id) { timers.delete(id); },
     requestAnimationFrame(callback) { frames.set(++nextId, callback); return nextId; },
@@ -44,7 +44,7 @@ function browser(systemReduced = false) {
     initialize() { events.get("DOMContentLoaded")(); },
     move(x) { events.get("mousemove")({ clientX: x }); },
     leave() { events.get("mouseleave")(); },
-    resize(width) { window.innerWidth = width; rootEvents.get("resize")(); },
+    resize(width, height = window.innerHeight) { window.innerWidth = width; window.innerHeight = height; rootEvents.get("resize")(); },
     hidden(value) { document.hidden = value; events.get("visibilitychange")(); },
     reduce(value) { mediaListener({ matches: value }); },
     now(value) { now = value; },
@@ -75,6 +75,7 @@ async function main() {
   eq(api.parallaxOffset(1, 1920, -1), 0);
   const first = api.easeParallax(0, 12, 1000 / 60);
   ok(first > 0 && first < 12, "movement eases toward the pointer instead of jumping");
+  eq(api.PARALLAX_SMOOTH_MS, 145, "memory changes retain the original cursor easing");
   near(api.easeParallax(first, 12, 1000 / 60), api.easeParallax(0, 12, 1000 / 30), "easing is independent of refresh rate");
   let eased = 0;
   for (let index = 0; index < 100; index++) {
@@ -86,6 +87,7 @@ async function main() {
 
   const page = browser();
   page.initialize();
+  eq(page.styles["--glow-opacity"], "0.85", "new wallpapers default to the brighter neon level");
   eq(page.images.length, 3, "only the complete foreground/background/logo set enables layering");
   page.move(1920);
   eq(page.frames.size, 0, "fallback remains static while layer assets are loading");
@@ -179,10 +181,35 @@ async function main() {
   const project = JSON.parse(fs.readFileSync(path.join(webRoot, "project.json"), "utf8"));
   for (const name of ["parallax", "parallaxstrength", "neon", "glowstrength", "respectreducedmotion"]) ok(project.general.properties[name], `Wallpaper Engine exposes ${name}`);
   eq(project.general.properties.respectreducedmotion.value, false);
+  eq(project.general.properties.glowstrength.value, 85, "Wallpaper Engine's default matches the web effect's brightness");
   const css = fs.readFileSync(path.join(webRoot, "style.css"), "utf8");
-  ok(css.includes('mask: url("assets/logo-mask.png") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat'), "logo color and blur follow the actual VI outline in the shared canvas");
+  ok(css.includes('mask: url("assets/logo-mask.png") var(--logo-mask-x) var(--logo-mask-y) / var(--scene-width) var(--scene-height) no-repeat'), "cropped logo masks retain the original scene cover coordinates");
   ok(css.includes("prefers-reduced-motion: reduce"));
   ok(css.includes("animation-play-state: paused !important"), "all CSS animations respect host pause");
+  ok(css.includes(".effects-off .dust") && css.includes(".effects-off .logo-glow"), "the master switch hides both particles and all logo effects");
+  ok(css.includes(".reduced-motion .dust") && css.includes(".reduced-motion.has-logo-mask .logo-glow"), "opting into reduced motion also removes stars and particles");
+  ok(css.includes("@keyframes outline-sparkle"), "contour stars have a separate staggered glimmer animation");
+  ok(css.includes('mask-image: url("assets/logo-glow-mask.png")'), "broad neon bloom follows the widened logo mask");
+  ok(fs.existsSync(path.join(webRoot, "assets/logo-glow-mask.png")), "the stronger glow mask is packaged locally");
+  const html = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
+  const dustBlock = html.match(/<div class="dust"[^>]*>([\s\S]*?)<\/div>/)[1];
+  eq((dustBlock.match(/<i\s/g) || []).length, 36, "36 differently sized particles make ambient motion visible");
+  eq((html.match(/class="logo-sparkle"/g) || []).length, 16, "sixteen contour points produce staggered star glints");
+  ok(html.includes('class="logo-glow__aura"'), "a broad aura supports the focused neon edge");
+  ok(html.includes('viewBox="0 0 3840 2160"'), "stars use the same original canvas as all scene layers");
+  ok(css.includes("--scene-anchor-x: 43%") && css.includes("--scene-anchor-x: 57%"), "star positions stay aligned when narrow screens crop the scene");
+  ok(css.includes("drop-shadow(0 0 5px #ffa8e4)"), "star glints include a visible soft halo");
+  for (const [width, height, anchorX, anchorY] of [[1920, 1080, .5, .5], [2560, 1080, .5, .4], [1200, 1080, .43, .5], [900, 1200, .57, .5]]) {
+    const geometry = api.logoGeometry(width, height);
+    const scale = Math.max(width / 3840, height / 2160);
+    near(geometry.left + geometry.maskX, (width - 3840 * scale) * anchorX, "logo crop and mask share the scene's horizontal anchor");
+    near(geometry.top + geometry.maskY, (height - 2160 * scale) * anchorY, "logo crop and mask share the scene's vertical anchor");
+    // A native logo point must land at the identical pixel before and after cropping.
+    near(geometry.left + 1088 * scale + geometry.maskX, (width - 3840 * scale) * anchorX + 1088 * scale, "the cropped rim is aligned with the original logo on every aspect ratio");
+    ok(geometry.width * geometry.height < (3840 * scale) * (2160 * scale) * .15, "each masked filter uses under 15% of the full artwork area before blur padding");
+  }
+  eq(api.logoGeometry(0, 1080), null);
+  eq(page.styles["--logo-width"], "1255.000px", "resizing refreshes the cropped effect dimensions");
   console.log(`PASS: ${checks} web effect, pointer, pause, fallback and property assertions`);
 }
 

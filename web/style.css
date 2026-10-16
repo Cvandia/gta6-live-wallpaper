@@ -15,11 +15,13 @@
   --small-size: min(1.1vw, 2vh);
   --intro-size: min(1.15vw, 2.1vh);
   --scene-position: 50% 50%;
+  --scene-anchor-x: 50%;
+  --scene-anchor-y: 50%;
   /* Every layer uses the original 3840×2160 canvas, even if an extracted PNG is smaller. */
   --scene-width: max(100vw, 177.77777778vh);
   --scene-height: max(56.25vw, 100vh);
   --parallax-x: 0px;
-  --glow-opacity: .65;
+  --glow-opacity: .85;
 }
 
 * { box-sizing: border-box; }
@@ -50,24 +52,50 @@ body {
 .is-layered .characters { display: block; }
 .logo-glow { z-index: -4; display: none; pointer-events: none; }
 .has-logo-mask .logo-glow { display: block; }
-.logo-glow__halo, .logo-glow__edge {
+.logo-glow__aura, .logo-glow__halo, .logo-glow__edge {
   position: absolute;
-  inset: 0;
+  left: var(--logo-left, 0px);
+  top: var(--logo-top, 0px);
+  width: var(--logo-width, 0px);
+  height: var(--logo-height, 0px);
 }
 /* Blur the masked child from its unmasked parent so light can extend outside the VI contour. */
-.logo-glow__halo::before, .logo-glow__edge::before {
+.logo-glow__aura::before, .logo-glow__halo::before, .logo-glow__edge::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, #ff4dbf 4%, #ffa2df 24%, #94d5ff 42%, #eac3ff 59%, #ff3da8 77%, #ffb5e4 96%);
+  background: linear-gradient(105deg, #ff28b5 4%, #ffa5ea 23%, #54e4ff 42%, #d09aff 59%, #ff159c 77%, #ffb9ef 96%);
   background-size: 260% 100%;
-  -webkit-mask: url("assets/logo-mask.png") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat;
-  mask: url("assets/logo-mask.png") var(--scene-position) / var(--scene-width) var(--scene-height) no-repeat;
-  animation: neon-flow 16s ease-in-out infinite alternate, neon-breathe 8.7s linear infinite;
+  -webkit-mask: url("assets/logo-mask.png") var(--logo-mask-x) var(--logo-mask-y) / var(--scene-width) var(--scene-height) no-repeat;
+  mask: url("assets/logo-mask.png") var(--logo-mask-x) var(--logo-mask-y) / var(--scene-width) var(--scene-height) no-repeat;
+  animation: neon-flow 9s ease-in-out infinite alternate, neon-breathe 6.8s linear infinite;
 }
-.logo-glow__halo { filter: blur(max(3px, .36vw)); }
-.logo-glow__edge { filter: blur(max(.6px, .06vw)); }
+.logo-glow__aura::before, .logo-glow__halo::before {
+  -webkit-mask-image: url("assets/logo-glow-mask.png");
+  mask-image: url("assets/logo-glow-mask.png");
+}
+.logo-glow__aura { filter: blur(max(9px, .75vw)) saturate(1.5); }
+.logo-glow__halo { filter: blur(max(2px, .15vw)) saturate(1.45); }
+.logo-glow__edge { filter: blur(max(.35px, .025vw)) brightness(1.2); }
 .logo-glow__edge::before { animation-delay: -3.1s, -1.8s; }
+.logo-glow__aura::before { animation-delay: -4.5s, -2.4s; }
+.logo-sparkles {
+  position: absolute;
+  width: var(--scene-width);
+  height: var(--scene-height);
+  left: var(--scene-anchor-x);
+  top: var(--scene-anchor-y);
+  transform: translate(calc(0% - var(--scene-anchor-x)), calc(0% - var(--scene-anchor-y)));
+  overflow: visible;
+}
+.logo-sparkle { opacity: var(--glow-opacity); }
+.logo-sparkle use {
+  fill: #fff9fd;
+  filter: drop-shadow(0 0 5px #ffa8e4) drop-shadow(0 0 12px #74dcff);
+  animation: outline-sparkle 6.4s ease-in-out var(--delay) infinite;
+  transform-origin: 0 0;
+}
+.logo-star__diagonal { fill: #ffbfe9; opacity: .7; }
 .readability {
   z-index: -3;
   background: linear-gradient(90deg, rgb(36 24 73 / 9%) 0%, transparent 47%),
@@ -85,14 +113,27 @@ body {
   position: absolute;
   left: var(--x);
   top: var(--y);
-  width: max(1px, .12vw);
-  height: max(1px, .12vw);
+  width: calc(max(2px, .19vw) * var(--size, 1));
+  height: calc(max(2px, .19vw) * var(--size, 1));
   border-radius: 50%;
-  background: #ffe5f3;
+  background: #fff1fb;
   opacity: 0;
-  box-shadow: 0 0 6px rgb(255 233 247 / 20%);
+  box-shadow: 0 0 5px rgb(255 245 253 / 85%), 0 0 13px rgb(255 121 207 / 64%), 0 0 23px rgb(164 153 255 / 26%);
   animation: drift var(--duration) linear var(--delay) infinite;
 }
+.dust i:nth-child(3n) { background: #d8f4ff; box-shadow: 0 0 5px rgb(227 251 255 / 85%), 0 0 14px rgb(100 206 255 / 60%); }
+.dust i:nth-child(5n) { background: #ffd4eb; }
+.dust i:nth-child(6n)::before, .dust i:nth-child(6n)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: linear-gradient(transparent, #fff9fd, transparent);
+  width: 1px;
+  height: 260%;
+  transform: translate(-50%, -50%);
+}
+.dust i:nth-child(6n)::after { transform: translate(-50%, -50%) rotate(90deg); }
 
 .clock {
   position: absolute;
@@ -192,32 +233,41 @@ body {
 @keyframes neon-flow { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
 /* Soft breathing plus tiny irregular fluctuations: the outline never flashes off. */
 @keyframes neon-breathe {
-  0%, 100% { opacity: calc(var(--glow-opacity) * .66); }
-  23% { opacity: calc(var(--glow-opacity) * .93); }
-  27% { opacity: calc(var(--glow-opacity) * .85); }
-  31% { opacity: calc(var(--glow-opacity) * .96); }
+  0%, 100% { opacity: calc(var(--glow-opacity) * .8); }
+  23% { opacity: var(--glow-opacity); }
+  27% { opacity: calc(var(--glow-opacity) * .88); }
+  31% { opacity: var(--glow-opacity); }
   52% { opacity: var(--glow-opacity); }
-  68% { opacity: calc(var(--glow-opacity) * .78); }
-  72% { opacity: calc(var(--glow-opacity) * .84); }
-  82% { opacity: calc(var(--glow-opacity) * .71); }
+  68% { opacity: calc(var(--glow-opacity) * .85); }
+  72% { opacity: calc(var(--glow-opacity) * .94); }
+  82% { opacity: calc(var(--glow-opacity) * .83); }
+}
+@keyframes outline-sparkle {
+  0%, 30%, 100% { opacity: .08; transform: scale(.3) rotate(0deg); }
+  41% { opacity: .54; transform: scale(.72) rotate(6deg); }
+  48% { opacity: 1; transform: scale(1.3) rotate(12deg); }
+  56% { opacity: .7; transform: scale(.92) rotate(18deg); }
+  73% { opacity: .08; transform: scale(.3) rotate(26deg); }
 }
 @keyframes drift {
-  0% { opacity: 0; transform: translate3d(0, 0, 0); }
-  12% { opacity: .28; }
-  78% { opacity: .18; }
-  100% { opacity: 0; transform: translate3d(2vw, -31vh, 0); }
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(.65); }
+  12% { opacity: .7; }
+  38% { opacity: .5; }
+  53% { opacity: .84; }
+  78% { opacity: .58; }
+  100% { opacity: 0; transform: translate3d(2.8vw, -38vh, 0) scale(1.12); }
 }
 
 /* A wide screen leaves the original art intact around the protagonists. */
 @media (min-aspect-ratio: 2/1) {
   :root { --content-width: 31vw; --number-size: min(5.4vw, 11.3vh); }
-  :root { --scene-position: 50% 40%; }
+  :root { --scene-position: 50% 40%; --scene-anchor-y: 40%; }
   .countdown { left: 5.3%; }
 }
 /* Compact monitors keep the timer in the unobstructed lower left. */
 @media (max-aspect-ratio: 3/2) {
   :root { --content-width: 42vw; --number-size: min(7vw, 9.8vh); --intro-size: min(1.55vw, 1.85vh); --small-size: min(1.4vw, 1.7vh); }
-  :root { --scene-position: 43% 50%; }
+  :root { --scene-position: 43% 50%; --scene-anchor-x: 43%; }
   .countdown { left: 4.5%; top: 58%; }
   .digits { column-gap: .7vw; }
   .countdown__progress { font-size: 1.3vw; }
@@ -225,7 +275,7 @@ body {
 }
 @media (max-aspect-ratio: 1/1) {
   :root { --content-width: 83vw; --number-size: 13vw; --intro-size: 2.7vw; --small-size: 2.5vw; }
-  :root { --scene-position: 57% 50%; }
+  :root { --scene-position: 57% 50%; --scene-anchor-x: 57%; }
   .countdown { left: 7%; top: auto; bottom: 7%; transform-origin: bottom left; }
   .clock__time { font-size: 7vw; }
   .clock__date { font-size: 2.1vw; }

@@ -1,0 +1,11 @@
+{
+  "checked_on": "2026-10-16",
+  "platform": "Windows x64, Python 3.11, Qt 6.12, offscreen, DPR 1",
+  "method": "Separate source processes, same frozen time and viewport, measured after 1.5 seconds of warmup with GetProcessMemoryInfo. PrivateUsage is private committed memory; values are not a runtime memory limit.",
+  "baseline_version": "1.1.1",
+  "updated_version": "1.2.0",
+  "samples": [
+    {"size": [1920, 1080], "old_private_mib": 158.57, "new_private_mib": 57.10, "old_working_set_mib": 178.76, "new_working_set_mib": 77.60},
+    {"size": [3840, 2160], "old_private_mib": 240.23, "new_private_mib": 123.04, "old_working_set_mib": 260.13, "new_working_set_mib": 143.38}
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "title": "GTA VI · 莱昂尼达发售倒计时",
-  "description": "官方 Jason & Lucia 美术背景 · VI 与数字渐变霓虹轮廓 · 人物随鼠标轻微横移 · 北京时间时钟及 GTA VI 发售倒计时。离线运行；默认目标为港区 PS5 商店列示的 2026 年 11 月 19 日 00:00（UTC+8）。",
+  "description": "官方 Jason & Lucia 美术背景 · 明亮 VI 渐变霓虹与轮廓星芒 · 柔光漂浮粒子 · 低延迟人物鼠标视差 · 北京时间时钟及 GTA VI 发售倒计时。离线运行；默认目标为港区 PS5 商店列示的 2026 年 11 月 19 日 00:00（UTC+8）。",
   "type": "web",
   "file": "index.html",
   "preview": "preview.jpg",
@@ -59,7 +59,7 @@
         "order": 6,
         "text": "霓虹轮廓亮度（%）",
         "type": "slider",
-        "value": 65,
+        "value": 85,
         "min": 0,
         "max": 100,
         "step": 1,
