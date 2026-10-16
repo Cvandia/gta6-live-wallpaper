@@ -22,6 +22,7 @@ from model import BEIJING, DEFAULT_TARGET, RELEASE_SOURCE, ART_SOURCE, parse_tar
 from effects import cursor_target, smooth_position, glow_pulse
 from visuals import WallpaperVisuals
 from memory import load_scaled_pixmap
+from effects_spec import load_effects_spec
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 ASSETS = ROOT / "assets"
@@ -495,7 +496,7 @@ def main():
     parser.add_argument("--config-dir")
     parser.add_argument("--screenshot")
     parser.add_argument("--at", help="ISO 8601 time used only for deterministic preview")
-    parser.add_argument("--phase", type=float, default=2.0, help="Initial animation phase for deterministic preview")
+    parser.add_argument("--phase", type=float, default=load_effects_spec()["initial_phase"], help="Initial animation phase for deterministic preview")
     parser.add_argument("--parallax-x", type=float, choices=None, help="Fixed normalized foreground offset for deterministic preview")
     parser.add_argument("--quit-after", type=int, default=0)
     args, unknown = parser.parse_known_args()

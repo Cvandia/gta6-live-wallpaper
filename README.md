@@ -29,13 +29,15 @@ Python 项目由 **uv** 管理虚拟环境和依赖，EXE 用户无需安装 Pyt
 
 ## ✨ 功能
 
-- 💜 **VI 霓虹轮廓**：增强粉紫至青色渐变外发光，加入轮廓星芒与高亮粒子，带缓慢呼吸与轻微忽闪
+- 💜 **VI 霓虹轮廓**：EXE 与 Web 共用原网页的 105° 渐变流动、柔和呼吸和 16 处轮廓星芒
 - ⏱️ **时间光效**：倒计时数字和右上角北京时间同步发光，秒级更新
 - 🖱️ **人物分层视差**：人物随鼠标左右平滑轻移，默认在 1920 像素宽度下最大为 **±12 px**
 - 🧠 **内存优化**：限定位图缓存，按显示大小加载绘图资源，并在设置或缩放变化时释放旧缓存
-- ✨ 漂浮微尘、柔光与粉色进度条
+- ✨ **64 个高亮粒子**：Web 与 EXE 共用固定种子、颜色、尺寸、上浮轨迹和短尾光，附柔光与粉色进度条
 - ⚙️ 可设置目标时间、光强、视差强度、时钟、帧率与文字大小
 - 🖥️ 支持独立桌面模式与 Wallpaper Engine 导入
+
+两版从 `assets/effects-spec.json` 读取同一套动效参数，使用一致的相位逻辑；Qt 与浏览器的抗锯齿、模糊和混合实现仍可能带来细微观感差别。
 
 ## 🚀 下载与使用
 
@@ -45,7 +47,7 @@ Release 提供 EXE、完整 ZIP 与 Web ZIP。GitHub Actions 会在推送到 `ma
 
 ### EXE 版
 
-下载并解压完整 `GTA6-LiveWallpaper-v1.2.0.zip`，双击 `GTA6Wallpaper.exe` 即可预览。支持 Windows 10 / 11 x64。
+下载并解压完整 `GTA6-LiveWallpaper-v1.3.0.zip`，双击 `GTA6Wallpaper.exe` 即可预览。支持 Windows 10 / 11 x64。
 
 在窗口内右键选择 **“独立设为桌面壁纸”**，可将壁纸放到主屏桌面图标后面。右键托盘的 **VI** 图标可打开设置、返回预览或退出。
 
@@ -58,7 +60,7 @@ Release 提供 EXE、完整 ZIP 与 Web ZIP。GitHub Actions 会在推送到 `ma
 | EXE | `GTA6Wallpaper.exe` | 在“创建壁纸”中按应用程序导入 |
 | Web | `WallpaperEngine-Web/index.html` | 在“创建壁纸”中导入网页入口，保持整个文件夹完整 |
 
-Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.2.0.zip`，在引擎右侧调节属性；EXE 版通过右键菜单或托盘打开设置。独立桌面模式与 Wallpaper Engine 模式选择一种运行即可。
+Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.3.0.zip`，在引擎右侧调节属性；EXE 版通过右键菜单或托盘打开设置。独立桌面模式与 Wallpaper Engine 模式选择一种运行即可。
 
 ## ⚙️ 设置
 
@@ -78,6 +80,8 @@ EXE 设置保存在 `%LOCALAPPDATA%/GTA6Wallpaper/settings.json`。关闭视差�
 EXE 限制绘图位图缓存的数量与大小，按当前显示大小加载绘图资源；调整设置或改变缩放时释放旧缓存，减少长时间运行时的内存占用。
 
 **内存实测：v1.2.0 在增强光效的同时降低了内存占用。**
+
+以下为 v1.2.0 内存优化时的对照数据，并非 v1.3.0 的复测结果。
 
 | 画面尺寸 | v1.1.1 私有提交内存 | v1.2.0 私有提交内存 | 降低约 |
 | --- | ---: | ---: | ---: |
@@ -129,7 +133,7 @@ uv run python tools/prepare_web.py
 uv run python -m http.server 8000 --directory web
 ```
 
-随后在浏览器访问 `http://localhost:8000`。`web/assets/` 不重复提交到仓库；发行包中的 `WallpaperEngine-Web/` 已带齐素材，可直接导入。
+随后在浏览器访问 `http://localhost:8000`。准备工具同时从共享参数生成 `web/effects-data.js`，供网页离线读取；`web/assets/` 不重复提交到仓库，发行包中的 `WallpaperEngine-Web/` 已带齐素材，可直接导入。
 
 ## 📦 构建 EXE
 
@@ -143,17 +147,17 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 输出文件：
 
 - `dist/GTA6Wallpaper.exe`：内置素材、Python 与 Qt 运行库的单文件程序
-- `dist/GTA6-LiveWallpaper-v1.2.0.zip`：EXE、完整 Web 壁纸、说明与第三方许可
-- `dist/GTA6-WallpaperEngine-Web-v1.2.0.zip`：完整网页壁纸与素材
+- `dist/GTA6-LiveWallpaper-v1.3.0.zip`：EXE、完整 Web 壁纸、说明与第三方许可
+- `dist/GTA6-WallpaperEngine-Web-v1.3.0.zip`：完整网页壁纸与素材
 
-GitHub Actions 在推送到 `main` 或手动运行后执行锁定依赖安装、Python / Web 测试及打包，并保存构建产物；首次成功构建会创建 `v1.2.0` Release。
+GitHub Actions 在推送到 `main` 或手动运行后执行锁定依赖安装、Python / Web 测试及打包，并保存构建产物；首次成功构建会创建 `v1.3.0` Release。
 
 ## 📂 项目结构
 
 ```text
 gta6-live-wallpaper/
 ├─ src/                  # Python / PySide6 壁纸程序
-├─ assets/               # 原画、生成图层、字体、图标及来源记录
+├─ assets/               # 原画、图层、字体、共享 effects-spec.json 与来源记录
 ├─ web/                  # Wallpaper Engine 网页版源码
 ├─ tests/                # 倒计时、动效、网页与窗口嵌入验证
 ├─ tools/                # 网页素材准备工具
@@ -174,6 +178,7 @@ Python / Web 测试可在项目根目录运行：
 uv run python -m unittest discover -s tests -p "test_*.py" -v
 node tests/test_web.cjs
 node tests/test_web_effects.cjs
+node tests/test_web_particles.cjs
 ```
 
 Web 测试需要 Node.js。Windows 原生窗口嵌入测试另见 `tests/test_embedding.py`，可检查父窗口关系、缩放与宿主退出清理。

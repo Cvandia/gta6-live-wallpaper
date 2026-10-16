@@ -192,8 +192,8 @@ async function main() {
   ok(css.includes('mask-image: url("assets/logo-glow-mask.png")'), "broad neon bloom follows the widened logo mask");
   ok(fs.existsSync(path.join(webRoot, "assets/logo-glow-mask.png")), "the stronger glow mask is packaged locally");
   const html = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
-  const dustBlock = html.match(/<div class="dust"[^>]*>([\s\S]*?)<\/div>/)[1];
-  eq((dustBlock.match(/<i\s/g) || []).length, 36, "36 differently sized particles make ambient motion visible");
+  ok(html.includes('<canvas class="dust" id="particles"'), "one canvas renders the shared EXE particle field");
+  eq((html.match(/<i\s/g) || []).length, 0, "legacy CSS particles are removed instead of layered over the shared field");
   eq((html.match(/class="logo-sparkle"/g) || []).length, 16, "sixteen contour points produce staggered star glints");
   ok(html.includes('class="logo-glow__aura"'), "a broad aura supports the focused neon edge");
   ok(html.includes('viewBox="0 0 3840 2160"'), "stars use the same original canvas as all scene layers");

@@ -105,7 +105,46 @@
     };
   }
 
-  const api = { DEFAULT_TARGET, DEFAULT_TARGET_MS, WAIT_START, BEIJING_OFFSET, PARALLAX_SMOOTH_MS, pad2, clamp, parseTarget, beijingParts, formatTarget, calculateState, parseAccent, pointerRatio, parallaxOffset, easeParallax, logoGeometry };
+  function parsePreviewPhase(search) {
+    if (typeof search !== "string") return null;
+    const match = search.match(/(?:^\?|&)previewPhase=([^&]*)/);
+    if (!match) return null;
+    try {
+      const text = decodeURIComponent(match[1]);
+      const phase = Number(text);
+      return text.trim() && Number.isFinite(phase) && phase >= 0 ? phase : null;
+    } catch (_) { return null; }
+  }
+
+  /** Same seed tuple and formulas as effects_spec.particle_state on the native side. */
+  function particleState(seed, width, height, phase, strength, spec = root.GTA6_EFFECTS_SPEC && root.GTA6_EFFECTS_SPEC.particles) {
+    if (!spec || !Array.isArray(seed) || seed.length !== 7 || ![width, height, phase].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    const amount = Number.isFinite(strength) ? clamp(strength, 0, 1) : spec.default_strength;
+    const [x, y, size, color, speed, offset, twinkle] = seed;
+    const motion = spec.trajectory, alphaSpec = spec.alpha, trail = spec.trail;
+    const wrap = value => value - Math.floor(value);
+    const scale = Math.max(spec.scale.minimum, Math.min(width / spec.scale.reference[0], height / spec.scale.reference[1]));
+    const px = wrap(x + motion.sway_amplitude * Math.sin(phase * motion.sway_frequency + offset)) * width;
+    const py = wrap(y - phase * speed * motion.rise_multiplier) * height;
+    const alpha = (alphaSpec.base + alphaSpec.amplitude * (alphaSpec.sine_base + alphaSpec.sine_amplitude * Math.sin(phase * twinkle + offset))) * amount;
+    return { x: px, y: py, size, color, alpha, scale, tail: {
+      x1: px, y1: py + trail.start_y * scale,
+      x2: px + trail.end_x * scale * Math.cos(phase * trail.cos_frequency + offset),
+      y2: py + (trail.end_y_base + size * trail.end_y_step) * scale,
+      width: Math.max(trail.width_min, (trail.width_base + size * trail.width_step) * scale),
+      alpha: alpha * trail.opacity_multiplier * trail.alpha / 255
+    } };
+  }
+
+  /** One bounded display canvas; the only other buffers are twelve tiny particle sprites. */
+  function particleCanvasSize(width, height, devicePixelRatio = 1) {
+    if (![width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    const requested = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    const ratio = Math.min(2, requested, Math.sqrt(3686400 / (width * height)));
+    return { width: Math.max(1, Math.floor(width * ratio)), height: Math.max(1, Math.floor(height * ratio)), ratio };
+  }
+
+  const api = { DEFAULT_TARGET, DEFAULT_TARGET_MS, WAIT_START, BEIJING_OFFSET, PARALLAX_SMOOTH_MS, pad2, clamp, parseTarget, beijingParts, formatTarget, calculateState, parseAccent, pointerRatio, parallaxOffset, easeParallax, logoGeometry, parsePreviewPhase, particleState, particleCanvasSize };
   root.GTAVIWallpaper = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof document === "undefined") return;
@@ -122,6 +161,12 @@
   let previousFrame = null;
   let mouseRatio = 0;
   let currentOffset = 0;
+  const previewPhase = parsePreviewPhase(root.location && root.location.search);
+  let particleCanvas = null, particleContext = null, particleSpec = null;
+  let particleFrame = null, particlePrevious = null, particlePhase = 0;
+  let particleWidth = 0, particleHeight = 0, particleRatio = 1;
+  let spriteKey = null, particleSprites = [];
+  api.getParticlePhase = () => particlePhase;
   const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: true, parallaxstrength: 12, neon: true, glowstrength: 85, respectreducedmotion: false };
 
   function cacheElements() {
@@ -162,6 +207,7 @@
     const paused = pausedByHost || document.hidden;
     document.body.classList.toggle("is-paused", paused);
     syncMotion();
+    syncParticles();
     if (paused) return;
     tick();
     timer = root.setTimeout(scheduleTick, 1000 - (Date.now() % 1000) + 8);
@@ -178,7 +224,124 @@
     document.documentElement.style.setProperty("--text-scale", String(options.textscale / 100));
     document.documentElement.style.setProperty("--glow-opacity", String(options.glowstrength / 100));
     syncMotion();
+    syncParticles();
     tick();
+    freezePreviewEffects();
+  }
+
+  function freezePreviewEffects() {
+    if (previewPhase === null || typeof document.getAnimations !== "function") return;
+    for (const animation of document.getAnimations()) {
+      animation.currentTime = previewPhase * 1000;
+      animation.pause();
+    }
+  }
+
+  function rgba(value, alpha) {
+    if (Array.isArray(value)) return `rgba(${value[0]},${value[1]},${value[2]},${value[3] / 255})`;
+    const color = value.replace("#", "");
+    return `rgba(${parseInt(color.slice(0, 2), 16)},${parseInt(color.slice(2, 4), 16)},${parseInt(color.slice(4, 6), 16)},${alpha / 255})`;
+  }
+
+  function buildParticleSprites(scale) {
+    const key = `${scale}:${particleRatio}`;
+    if (spriteKey === key) return;
+    // Drop old canvas references before rebuilding for another monitor size.
+    particleSprites = [];
+    const appearance = particleSpec.sprite;
+    particleSprites = particleSpec.colors.map(color => Array.from({ length: appearance.size_count }, (_, size) => {
+      const radius = (appearance.radius_base + size * appearance.radius_step) * scale;
+      const core = (appearance.core_base + size * appearance.core_step) * scale;
+      const half = radius + appearance.padding;
+      const sprite = document.createElement("canvas");
+      sprite.width = Math.max(1, Math.round(half * 2 * particleRatio));
+      sprite.height = sprite.width;
+      const painter = sprite.getContext("2d", { alpha: true });
+      painter.setTransform(particleRatio, 0, 0, particleRatio, 0, 0);
+      const gradient = painter.createRadialGradient(half, half, 0, half, half, radius);
+      appearance.stops.forEach(stop => gradient.addColorStop(stop.at, stop.color ? rgba(stop.color) : rgba(color, stop.tint_alpha)));
+      painter.fillStyle = gradient;
+      painter.beginPath(); painter.arc(half, half, radius, 0, Math.PI * 2); painter.fill();
+      painter.fillStyle = rgba(appearance.core_color);
+      painter.beginPath(); painter.arc(half, half, core, 0, Math.PI * 2); painter.fill();
+      return { canvas: sprite, half, width: sprite.width / particleRatio, height: sprite.height / particleRatio };
+    }));
+    spriteKey = key;
+  }
+
+  function clearParticles() {
+    if (particleContext) particleContext.clearRect(0, 0, particleWidth, particleHeight);
+  }
+
+  function drawParticles() {
+    if (!particleContext || !particleSpec || !particleWidth || !particleHeight) return;
+    const scale = Math.max(particleSpec.scale.minimum, Math.min(particleWidth / particleSpec.scale.reference[0], particleHeight / particleSpec.scale.reference[1]));
+    buildParticleSprites(scale);
+    clearParticles();
+    particleContext.globalCompositeOperation = particleSpec.composition === "plus" ? "lighter" : particleSpec.composition;
+    particleContext.lineCap = particleSpec.trail.cap;
+    for (const seed of particleSpec.seeds) {
+      const state = particleState(seed, particleWidth, particleHeight, particlePhase, particleSpec.default_strength, particleSpec);
+      const tail = state.tail;
+      particleContext.globalAlpha = tail.alpha;
+      particleContext.strokeStyle = particleSpec.colors[state.color];
+      particleContext.lineWidth = tail.width;
+      particleContext.beginPath(); particleContext.moveTo(tail.x1, tail.y1); particleContext.lineTo(tail.x2, tail.y2); particleContext.stroke();
+      const sprite = particleSprites[state.color][state.size];
+      particleContext.globalAlpha = state.alpha;
+      particleContext.drawImage(sprite.canvas, state.x - sprite.half, state.y - sprite.half, sprite.width, sprite.height);
+    }
+    particleContext.globalAlpha = 1;
+    particleContext.globalCompositeOperation = "source-over";
+  }
+
+  function resizeParticles() {
+    if (!particleCanvas) return;
+    const width = Number(root.innerWidth), height = Number(root.innerHeight);
+    const size = particleCanvasSize(width, height, Number(root.devicePixelRatio));
+    if (!size) return;
+    if (particleWidth === width && particleHeight === height && particleCanvas.width === size.width && particleCanvas.height === size.height) return;
+    particleWidth = width; particleHeight = height; particleRatio = size.ratio;
+    particleCanvas.width = size.width; particleCanvas.height = size.height;
+    particleContext.setTransform(size.width / width, 0, 0, size.height / height, 0, 0);
+    spriteKey = null;
+    if (options.effects && !reducedMotion) drawParticles();
+  }
+
+  function canAnimateParticles() {
+    return particleContext && options.effects && !reducedMotion && !pausedByHost && !document.hidden;
+  }
+
+  function animateParticles(timestamp) {
+    particleFrame = null;
+    if (!canAnimateParticles() || previewPhase !== null) return;
+    if (particlePrevious !== null) particlePhase += Math.min(.1, Math.max(0, (timestamp - particlePrevious) / 1000));
+    particlePrevious = timestamp;
+    drawParticles();
+    particleFrame = root.requestAnimationFrame(animateParticles);
+  }
+
+  function syncParticles() {
+    if (!particleContext) return;
+    if (!canAnimateParticles() || previewPhase !== null) {
+      if (particleFrame !== null) root.cancelAnimationFrame(particleFrame);
+      particleFrame = null; particlePrevious = null;
+      if (!options.effects || reducedMotion) clearParticles();
+      else if (previewPhase !== null && !pausedByHost && !document.hidden) drawParticles();
+      return;
+    }
+    if (particleFrame === null && typeof root.requestAnimationFrame === "function") particleFrame = root.requestAnimationFrame(animateParticles);
+  }
+
+  function initializeParticles() {
+    const spec = root.GTA6_EFFECTS_SPEC;
+    const canvas = document.getElementById("particles");
+    if (!spec || !spec.particles || !Array.isArray(spec.particles.seeds) || !canvas || typeof canvas.getContext !== "function" || typeof document.createElement !== "function") return;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) return;
+    particleSpec = spec.particles; particleCanvas = canvas; particleContext = context;
+    particlePhase = previewPhase === null ? spec.initial_phase : previewPhase;
+    resizeParticles();
   }
 
   function canMove() {
@@ -246,6 +409,7 @@
       document.body.classList.toggle("is-layered", true);
       document.body.classList.toggle("has-logo-mask", true);
       syncMotion();
+      freezePreviewEffects();
     }).catch(() => {
       // The static original is already visible, so missing layers never create a blank wallpaper.
     });
@@ -301,6 +465,7 @@
       if (typeof preference.addEventListener === "function") preference.addEventListener("change", updateMotionPreference);
       else if (typeof preference.addListener === "function") preference.addListener(updateMotionPreference);
     }
+    initializeParticles();
     applyOptions();
     document.addEventListener("visibilitychange", scheduleTick);
     document.addEventListener("mousemove", event => {
@@ -308,7 +473,7 @@
       syncMotion();
     }, { passive: true });
     document.addEventListener("mouseleave", () => { mouseRatio = 0; syncMotion(); });
-    if (typeof root.addEventListener === "function") root.addEventListener("resize", () => { updateSceneGeometry(); syncMotion(); }, { passive: true });
+    if (typeof root.addEventListener === "function") root.addEventListener("resize", () => { updateSceneGeometry(); resizeParticles(); syncMotion(); syncParticles(); freezePreviewEffects(); }, { passive: true });
     loadSceneLayers();
     scheduleTick();
   }

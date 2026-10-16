@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
-$version = '1.2.0'
+$version = '1.3.0'
 Push-Location -LiteralPath $projectRoot
 try {
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {

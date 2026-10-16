@@ -108,32 +108,7 @@ body {
     radial-gradient(ellipse 32% 33% at 92% 60%, rgb(255 162 190 / 6%), transparent 100%);
   animation: sunset 14s ease-in-out infinite alternate;
 }
-.dust { z-index: -1; pointer-events: none; }
-.dust i {
-  position: absolute;
-  left: var(--x);
-  top: var(--y);
-  width: calc(max(2px, .19vw) * var(--size, 1));
-  height: calc(max(2px, .19vw) * var(--size, 1));
-  border-radius: 50%;
-  background: #fff1fb;
-  opacity: 0;
-  box-shadow: 0 0 5px rgb(255 245 253 / 85%), 0 0 13px rgb(255 121 207 / 64%), 0 0 23px rgb(164 153 255 / 26%);
-  animation: drift var(--duration) linear var(--delay) infinite;
-}
-.dust i:nth-child(3n) { background: #d8f4ff; box-shadow: 0 0 5px rgb(227 251 255 / 85%), 0 0 14px rgb(100 206 255 / 60%); }
-.dust i:nth-child(5n) { background: #ffd4eb; }
-.dust i:nth-child(6n)::before, .dust i:nth-child(6n)::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  background: linear-gradient(transparent, #fff9fd, transparent);
-  width: 1px;
-  height: 260%;
-  transform: translate(-50%, -50%);
-}
-.dust i:nth-child(6n)::after { transform: translate(-50%, -50%) rotate(90deg); }
+.dust { z-index: -1; width: 100%; height: 100%; pointer-events: none; mix-blend-mode: plus-lighter; }
 
 .clock {
   position: absolute;
@@ -248,14 +223,6 @@ body {
   48% { opacity: 1; transform: scale(1.3) rotate(12deg); }
   56% { opacity: .7; transform: scale(.92) rotate(18deg); }
   73% { opacity: .08; transform: scale(.3) rotate(26deg); }
-}
-@keyframes drift {
-  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(.65); }
-  12% { opacity: .7; }
-  38% { opacity: .5; }
-  53% { opacity: .84; }
-  78% { opacity: .58; }
-  100% { opacity: 0; transform: translate3d(2.8vw, -38vh, 0) scale(1.12); }
 }
 
 /* A wide screen leaves the original art intact around the protagonists. */

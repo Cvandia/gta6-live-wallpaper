@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import copy
 from pathlib import Path
 import sys
 import unittest
@@ -15,6 +16,7 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication
 
 from visuals import WallpaperVisuals
+from effects_spec import logo_state, particle_states, sparkle_states
 
 
 class VisualsTest(unittest.TestCase):
@@ -53,6 +55,25 @@ class VisualsTest(unittest.TestCase):
         self.assertEqual(first, self.render(8, strength=0))
         self.assertEqual(first.pixelColor(30, 30), QColor("#211735"))
         self.assertEqual(self.visuals.cache_bytes(), self.source_bytes)
+
+    def test_downsampled_aura_keeps_the_original_logo_size_and_position(self):
+        spec = copy.deepcopy(self.visuals.spec)
+        spec["logo"]["layers"] = [spec["logo"]["layers"][0]]
+        spec["logo"]["sparkles"]["points"] = []
+        visual = WallpaperVisuals(self.visuals.logo_mask, self.visuals.logo_glow,
+            native_size=self.visuals.native_size, crop_rect=self.visuals.crop_rect,
+            inputs_cropped=True, effects_spec=spec)
+        canvas = QPixmap(1280, 720)
+        canvas.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(canvas)
+        visual.paint_logo(painter, QRectF(0, 0, 1280, 720), 2)
+        painter.end()
+        self.assertLess(visual._logo_frames[0].devicePixelRatioF(), 1)
+        image = canvas.toImage()
+        # The real I stroke lies at x≈457. A point-only pixmap draw used to
+        # shrink this layer into x≈60..270 when its cached DPR was below one.
+        self.assertGreater(max(image.pixelColor(x, y).alpha()
+                               for x in range(450, 466) for y in range(150, 300)), 5)
 
     def test_drawing_restores_caller_painter_state(self):
         canvas = QPixmap(640, 360)
@@ -111,10 +132,16 @@ class VisualsTest(unittest.TestCase):
                     self.assertTrue(all(max(frame.width(), frame.height()) <= 1024
                                         for frame in self.visuals._logo_frames))
                     self.assertLess(self.visuals.cache_bytes(), 22*1024**2)
-                    frames = tuple(frame.cacheKey() for frame in self.visuals._logo_frames)
+                    frames = tuple(id(frame) for frame in self.visuals._logo_frames)
+                    masks = tuple(mask.cacheKey() for mask in self.visuals._logo_masks)
+                    retained_bytes = self.visuals.cache_bytes()
                     self.visuals.paint_logo(painter, target, 2.1, .85, dpr)
                     self.assertEqual(self.visuals.cache_builds, before+1)
-                    self.assertEqual(tuple(frame.cacheKey() for frame in self.visuals._logo_frames), frames)
+                    # The three working pixmaps are repainted in place, while
+                    # blurred alpha masks remain immutable across phases.
+                    self.assertEqual(tuple(id(frame) for frame in self.visuals._logo_frames), frames)
+                    self.assertEqual(tuple(mask.cacheKey() for mask in self.visuals._logo_masks), masks)
+                    self.assertEqual(self.visuals.cache_bytes(), retained_bytes)
                     self.visuals.invalidate()
                     self.assertEqual(self.visuals.cache_bytes(), self.source_bytes)
         finally:
@@ -140,8 +167,37 @@ class VisualsTest(unittest.TestCase):
         self.visuals.invalidate()
         self.assertEqual(self.visuals.cache_bytes(), self.source_bytes)
         self.assertEqual(self.visuals._logo_frames, [])
+        self.assertEqual(self.visuals._logo_masks, [])
         self.assertEqual(self.visuals._particle_sprites, [])
         self.assertEqual(self.visuals._star_sprites, [])
+
+    def test_logo_uses_shared_web_timings_and_sixteen_fixed_sparkle_positions(self):
+        spec = self.visuals.spec
+        self.assertEqual(spec["logo"]["flow"]["duration"], 9)
+        self.assertEqual(spec["logo"]["breathe"]["duration"], 6.8)
+        self.assertEqual(spec["logo"]["sparkles"]["duration"], 6.4)
+        points = [(point["x"], point["y"]) for point in spec["logo"]["sparkles"]["points"]]
+        self.assertEqual(len(points), 16)
+        first = sparkle_states(0, .85, spec)
+        later = sparkle_states(3, .85, spec)
+        self.assertEqual([(state["x"], state["y"]) for state in first], points)
+        self.assertEqual([(state["x"], state["y"]) for state in later], points)
+        self.assertNotEqual([state["opacity"] for state in first], [state["opacity"] for state in later])
+        self.assertAlmostEqual(logo_state(0, "halo", .85, spec)["opacity"], .85*.8)
+        self.assertAlmostEqual(logo_state(9, "halo", .85, spec)["flow"], 1)
+        self.assertAlmostEqual(logo_state(18, "halo", .85, spec)["flow"], 0)
+        self.assertFalse(hasattr(self.visuals, "_tracks"), "No moving scanline/star tracks remain")
+
+    def test_shared_particle_seeds_preserve_the_existing_native_formula(self):
+        spec = self.visuals.spec
+        self.assertEqual(self.visuals.particle_count, 64)
+        self.assertEqual(self.visuals._particles, tuple(tuple(seed) for seed in spec["particles"]["seeds"]))
+        states = particle_states(2, 1920, 1080, .85, spec)
+        x, y, _, _, speed, offset, twinkle = self.visuals._particles[0]
+        import math
+        self.assertAlmostEqual(states[0]["x"], ((x+.010*math.sin(2*.24+offset)) % 1)*1920)
+        self.assertAlmostEqual(states[0]["y"], ((y-2*speed*.34) % 1)*1080)
+        self.assertAlmostEqual(states[0]["alpha"], (.43+.42*(.5+.5*math.sin(2*twinkle+offset)))*.85)
 
 
 if __name__ == "__main__":

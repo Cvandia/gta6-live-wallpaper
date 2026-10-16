@@ -1,11 +1,12 @@
 """Copy the shared local assets into the standalone Web wallpaper directory."""
 
 from pathlib import Path
+import json
 import shutil
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-REQUIRED_ASSETS = ("background.jpg", "Anton-Regular.ttf")
+REQUIRED_ASSETS = ("background.jpg", "Anton-Regular.ttf", "effects-spec.json")
 OPTIONAL_ASSETS = (
     "scene-background.jpg",
     "characters.png",
@@ -29,6 +30,12 @@ def prepare_web_assets() -> int:
         if source.is_file():
             shutil.copy2(source, destination / name)
             copied += 1
+    spec = json.loads((assets / "effects-spec.json").read_text(encoding="utf-8"))
+    # A classic local script also works under file://, unlike fetch() of a JSON file.
+    (PROJECT_ROOT / "web" / "effects-data.js").write_text(
+        "window.GTA6_EFFECTS_SPEC = " + json.dumps(spec, ensure_ascii=False, separators=(",", ":")) + ";\n",
+        encoding="utf-8", newline="\n",
+    )
     return copied
 
 

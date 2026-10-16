@@ -1,128 +1,153 @@
-"""Cached neon, travelling VI sparkles, and luminous wallpaper particles.
+"""Web-matched VI light and shared, deterministic luminous particles.
 
-The caller owns all timing and switches.  Passing the same phase always draws
-the same frame, including while the app is paused or exporting a screenshot.
-Large transparent surfaces are built only when the target size or DPR changes.
+All timing/style data comes from assets/effects-spec.json. The caller supplies
+animation time, so pausing and frozen screenshots require no separate clock.
+Three reusable colour buffers and their blurred alpha masks are size-bounded;
+animation never allocates a new large pixmap or accumulates coloured frames.
 """
 from __future__ import annotations
 
 import math
 from pathlib import Path
-import random
 
 from PySide6.QtCore import QPointF, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import (
-    QColor, QImageReader, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
-    QRadialGradient,
+    QColor, QImageReader, QLinearGradient, QPainter, QPainterPath, QPen,
+    QPixmap, QRadialGradient,
 )
+from PySide6.QtWidgets import QGraphicsBlurEffect, QGraphicsPixmapItem, QGraphicsScene
 
-
-_PALETTE = ("#3edfff", "#ff4fcf", "#9b6dff", "#ff9de5", "#55edff", "#db62ff")
-_PARTICLE_COLORS = ("#91eeff", "#ff9bdf", "#c0a6ff", "#ffe6be")
-# Actual centre lines of the artwork's VI strokes, in its native 3840x2160
-# coordinates.  Separate runs preserve the intentional gaps around the words.
-_VI_RUNS = (
-    ((563, 298), (518, 219), (265, 219), (654, 1017), (713, 910)),
-    ((747, 299), (792, 219), (1049, 219), (1003, 299)),
-    ((1124, 309), (1124, 219), (1361, 219), (1361, 1043), (1101, 1043), (1101, 908)),
+from effects_spec import (
+    load_effects_spec, logo_state, particle_states, sparkle_states,
 )
-
-
-class _Track:
-    def __init__(self, vertices):
-        self.vertices = vertices
-        self.lengths = [0.0]
-        for a, b in zip(vertices, vertices[1:]):
-            self.lengths.append(self.lengths[-1] + math.hypot(b[0]-a[0], b[1]-a[1]))
-        self.total = self.lengths[-1]
-
-    def point(self, distance):
-        distance = min(self.total, max(0.0, distance))
-        for i in range(len(self.vertices)-1):
-            if distance <= self.lengths[i+1]:
-                a, b = self.vertices[i], self.vertices[i+1]
-                blend = (distance-self.lengths[i])/(self.lengths[i+1]-self.lengths[i])
-                return a[0]+(b[0]-a[0])*blend, a[1]+(b[1]-a[1])*blend
-        return self.vertices[-1]
 
 
 def _blank(width, height, dpr):
-    pixmap = QPixmap(max(1, round(width*dpr)), max(1, round(height*dpr)))
-    pixmap.setDevicePixelRatio(dpr)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    return pixmap
-
-
-def _gradient(width, height, variant):
-    result = QLinearGradient(0, height*.1, width, height*.85)
-    for stop in range(7):
-        result.setColorAt(stop/6, QColor(_PALETTE[(stop+variant) % len(_PALETTE)]))
+    result = QPixmap(max(1, round(width*dpr)), max(1, round(height*dpr)))
+    result.setDevicePixelRatio(dpr)
+    result.fill(Qt.GlobalColor.transparent)
     return result
 
 
-def _tint(mask, width, height, variant, dpr):
-    result = _blank(width, height, dpr)
+def _filtered_color(color, saturation=1.0, brightness=1.0):
+    """CSS saturate()/brightness() colour matrix, applied to gradient stops."""
+    color = QColor(color)
+    r, g, b = color.redF(), color.greenF(), color.blueF()
+    luminance = .213*r+.715*g+.072*b
+    return QColor.fromRgbF(*(min(1.0, max(0.0, (luminance+(c-luminance)*saturation)*brightness))
+                              for c in (r, g, b)), color.alphaF())
+
+
+def _css_gradient(width, height, padding, progress, flow, layer):
+    # CSS background-position moves the 260%-wide image by (box-image)*p.
+    # A CSS angle is clockwise from up; 105 degrees therefore slopes down/right.
+    image_w, image_h = width*flow["background_scale"][0], height*flow["background_scale"][1]
+    angle = math.radians(flow["angle_deg"])
+    dx, dy = math.sin(angle), -math.cos(angle)
+    length = abs(image_w*dx)+abs(image_h*dy)
+    cx = padding+(width-image_w)*progress+image_w/2
+    cy = padding+(height-image_h)*.5+image_h/2
+    gradient = QLinearGradient(cx-dx*length/2, cy-dy*length/2,
+                               cx+dx*length/2, cy+dy*length/2)
+    stops = flow["stops"]
+    # Intermediate stops preserve colour-filter clipping between CSS stops.
+    for index, (position, color) in enumerate(stops):
+        if index:
+            previous, previous_color = stops[index-1]
+            a, b = QColor(previous_color), QColor(color)
+            for step in (1, 2, 3):
+                amount = step/4
+                mixed = QColor.fromRgbF(a.redF()+(b.redF()-a.redF())*amount,
+                                       a.greenF()+(b.greenF()-a.greenF())*amount,
+                                       a.blueF()+(b.blueF()-a.blueF())*amount)
+                gradient.setColorAt(previous+(position-previous)*amount,
+                                    _filtered_color(mixed, layer["saturation"], layer["brightness"]))
+        gradient.setColorAt(position, _filtered_color(color, layer["saturation"], layer["brightness"]))
+    return gradient
+
+
+def _blurred_alpha(source, width, height, blur, padding, dpr):
+    """Pre-render a padded soft mask once at the layer's bounded resolution."""
+    total_w, total_h = width+padding*2, height+padding*2
+    result = _blank(total_w, total_h, dpr)
+    # Work in physical scene units; the result receives its logical DPR after
+    # rendering. Qt's blur radius is approximately twice a CSS Gaussian sigma.
+    result.setDevicePixelRatio(1)
+    scaled = source.scaled(max(1, round(width*dpr)), max(1, round(height*dpr)),
+                           Qt.AspectRatioMode.IgnoreAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+    scaled.setDevicePixelRatio(1)
+    # Put padding into source pixels, rather than an item's scene position:
+    # QGraphicsBlurEffect's offscreen source offset can otherwise discard that
+    # translation and leave a displaced duplicate silhouette in the aura.
+    padded = QPixmap(result.size())
+    padded.fill(Qt.GlobalColor.transparent)
+    pp = QPainter(padded)
+    pp.drawPixmap(QPointF(padding*dpr, padding*dpr), scaled)
+    pp.end()
+    scene = QGraphicsScene()
+    item = QGraphicsPixmapItem(padded)
+    effect = QGraphicsBlurEffect()
+    effect.setBlurHints(QGraphicsBlurEffect.BlurHint.QualityHint)
+    effect.setBlurRadius(max(.01, blur*dpr*2))
+    item.setGraphicsEffect(effect)
+    scene.addItem(item)
+    bounds = QRectF(0, 0, result.width(), result.height())
+    scene.setSceneRect(bounds)
     painter = QPainter(result)
-    painter.fillRect(QRectF(0, 0, width, height), _gradient(width, height, variant))
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-    painter.drawPixmap(0, 0, mask)
+    scene.render(painter, bounds, bounds)
     painter.end()
+    result.setDevicePixelRatio(dpr)
     return result
+
+
+def _path(vertices, scale):
+    path = QPainterPath()
+    path.moveTo(vertices[0][0]*scale, vertices[0][1]*scale)
+    for x, y in vertices[1:]:
+        path.lineTo(x*scale, y*scale)
+    path.closeSubpath()
+    return path
 
 
 class WallpaperVisuals:
-    """Reusable drawing cache for a single wallpaper window.
-
-    ``target`` is the full artwork's destination QRectF, including cover-crop.
-    Strength uses 0..1; 0.85 is the intended visible default.  Qt coordinates
-    are logical pixels, and dpr is QWidget.devicePixelRatioF().
-    """
-
     particle_count = 64
     max_logo_cache_edge = 1024
 
     def __init__(self, logo_mask: QPixmap, logo_glow: QPixmap, *,
-                 native_size=None, crop_rect=None, inputs_cropped=False):
+                 native_size=None, crop_rect=None, inputs_cropped=False,
+                 effects_spec=None):
+        self.spec = effects_spec if effects_spec is not None else load_effects_spec()
+        self.particle_count = self.spec["particles"]["count"]
         self.native_size = QSize(native_size or logo_mask.size())
         if self.native_size.isEmpty():
-            self.native_size = QSize(3840, 2160)
-        self.crop_rect = QRect(crop_rect) if crop_rect is not None else self._crop_for(self.native_size)
-        # QPixmap.copy makes independent cropped storage.  Keeping a reference
-        # to a shared full transparent 4K mask would otherwise retain 32 MiB.
+            self.native_size = QSize(*self.spec["logo"]["canvas"])
+        self.crop_rect = QRect(crop_rect) if crop_rect is not None else self._crop_for(self.native_size, self.spec)
         self.logo_mask = logo_mask if inputs_cropped else logo_mask.copy(self.crop_rect)
         self.logo_glow = logo_glow if inputs_cropped else logo_glow.copy(self.crop_rect)
         self._logo_key = None
-        self._logo_frames = []
+        self._logo_frames = []  # Three reusable working surfaces, not a growing frame atlas.
+        self._logo_masks = []
+        self._logo_metadata = []
+        self._logo_phases = []
         self._logo_local_rect = QRectF()
-        self._sprite_key = None
-        self._star_key = None
+        self._sprite_key = self._star_key = None
         self._particle_sprites = []
         self._star_sprites = []
-        self._tracks = [_Track(vertices) for vertices in _VI_RUNS]
+        self._particles = tuple(tuple(seed) for seed in self.spec["particles"]["seeds"])
         self.cache_builds = 0
-        rng = random.Random(61016)
-        # Immutable seeds, no advancing random state: phase determines motion.
-        self._particles = tuple(
-            (rng.random(), rng.random(), rng.randrange(3), rng.randrange(4),
-             rng.uniform(.014, .039), rng.random()*math.tau,
-             rng.uniform(.25, .65))
-            for _ in range(self.particle_count)
-        )
 
     @staticmethod
-    def _crop_for(native_size):
-        return QRect(round(native_size.width()*180/3840),
-                     round(native_size.height()*140/2160),
-                     round(native_size.width()*1255/3840),
-                     round(native_size.height()*980/2160))
+    def _crop_for(native_size, spec=None):
+        logo = (spec if spec is not None else load_effects_spec())["logo"]
+        x, y, width, height = logo["crop"]
+        native_w, native_h = logo["canvas"]
+        return QRect(round(native_size.width()*x/native_w), round(native_size.height()*y/native_h),
+                     round(native_size.width()*width/native_w), round(native_size.height()*height/native_h))
 
     @classmethod
     def from_assets(cls, assets):
-        """Read only each mask's useful rectangle into persistent Qt storage.
-
-        QImageReader may internally decode a PNG before clipping, but the full
-        temporary QImage is released by read(); no full QPixmap is created.
-        """
+        spec = load_effects_spec(Path(assets) / "effects-spec.json")
         masks = []
         native_size = crop_rect = None
         for filename in ("logo-mask.png", "logo-glow-mask.png"):
@@ -130,79 +155,62 @@ class WallpaperVisuals:
             source_size = reader.size()
             if native_size is None and not source_size.isEmpty():
                 native_size = QSize(source_size)
-                crop_rect = cls._crop_for(native_size)
+                crop_rect = cls._crop_for(native_size, spec)
             if crop_rect is not None:
                 reader.setClipRect(crop_rect)
             image = reader.read()
             if crop_rect is not None and image.size() == source_size:
-                # Defensive fallback for image plugins that ignore ClipRect.
                 image = image.copy(crop_rect)
             masks.append(QPixmap.fromImage(image))
         return cls(*masks, native_size=native_size, crop_rect=crop_rect,
-                   inputs_cropped=True)
+                   inputs_cropped=True, effects_spec=spec)
 
     def cache_bytes(self):
-        """Estimate resident pixmap pixels, excluding transient decode buffers."""
-        pixmaps = [self.logo_mask, self.logo_glow, *self._logo_frames]
+        """Estimate resident CPU pixmap pixels, excluding temporary PNG decode."""
+        pixmaps = [self.logo_mask, self.logo_glow, *self._logo_frames, *self._logo_masks]
         pixmaps.extend(sprite for row in self._particle_sprites for sprite, _ in row)
         pixmaps.extend(sprite for sprite, _ in self._star_sprites)
-        # Count implicit-shared pixmaps once; Qt/raster bookkeeping is separate.
         unique = {pixmap.cacheKey(): pixmap for pixmap in pixmaps if not pixmap.isNull()}
         return sum(p.width()*p.height()*max(1, p.depth()//8) for p in unique.values())
 
     def invalidate(self):
-        """Optional explicit invalidation; target size/DPR auto-invalidate."""
         self._logo_key = self._sprite_key = self._star_key = None
         self._logo_frames.clear()
+        self._logo_masks.clear()
+        self._logo_metadata.clear()
+        self._logo_phases.clear()
         self._particle_sprites.clear()
         self._star_sprites.clear()
 
-    def _ensure_logo(self, target, dpr):
+    def _ensure_logo(self, target, dpr, viewport_width=None):
         if self.logo_mask.isNull():
             return False
-        key = (round(target.width(), 3), round(target.height(), 3), round(dpr, 3))
+        viewport_width = viewport_width or target.width()
+        key = (round(target.width(), 3), round(target.height(), 3), round(dpr, 3), round(viewport_width, 3))
         if self._logo_key == key:
             return True
-        # Free the previous viewport's atlas before allocating its replacement.
         self._logo_frames.clear()
+        self._logo_masks.clear()
+        self._logo_metadata.clear()
+        self._logo_phases.clear()
         self._logo_key = None
-        # Crop around the effect's nonempty alpha.  Never cache full 4K canvases.
-        native = self.native_size
-        sx, sy = target.width()/native.width(), target.height()/native.height()
-        crop = self.crop_rect
-        width, height = crop.width()*sx, crop.height()*sy
-        # Halo and thin rim remain smooth at this resolution, while a 4K/DPR2
-        # monitor cannot multiply a large transparent atlas without a bound.
-        cache_dpr = min(dpr, self.max_logo_cache_edge/max(width, height))
-        masks = []
-        for source in (self.logo_mask, self.logo_glow):
+        sx, sy = target.width()/self.native_size.width(), target.height()/self.native_size.height()
+        width, height = self.crop_rect.width()*sx, self.crop_rect.height()*sy
+        self._logo_local_rect = QRectF(self.crop_rect.x()*sx, self.crop_rect.y()*sy, width, height)
+        limits = {"aura": 256, "halo": 512, "edge": self.max_logo_cache_edge}
+        for layer in self.spec["logo"]["layers"]:
+            blur = max(layer["blur_min"], layer["blur_width"]*viewport_width)
+            padding = math.ceil(blur*3+2)
+            total_w, total_h = width+padding*2, height+padding*2
+            cache_dpr = min(dpr, limits[layer["name"]]/max(total_w, total_h))
+            source = self.logo_mask if layer["mask"] == "logo-mask.png" else self.logo_glow
             if source.isNull():
                 source = self.logo_mask
-            scaled = source.scaled(
-                max(1, round(width*cache_dpr)), max(1, round(height*cache_dpr)),
-                Qt.AspectRatioMode.IgnoreAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            scaled.setDevicePixelRatio(cache_dpr)
-            masks.append(scaled)
-        bloom = max(.8, target.width()/3840*7)
-        for variant in range(3):
-            rim = _tint(masks[0], width, height, variant*2, cache_dpr)
-            halo = _tint(masks[1], width, height, variant*2, cache_dpr)
-            composed = _blank(width, height, cache_dpr)
-            painter = QPainter(composed)
-            # Cached wider bloom makes the glow visible even against the dusk
-            # sky.  These blur-like offset copies run once, never per frame.
-            painter.setOpacity(.24)
-            for x, y in ((-bloom, 0), (bloom, 0), (0, -bloom), (0, bloom)):
-                painter.drawPixmap(QPointF(x, y), halo)
-            painter.setOpacity(.95)
-            painter.drawPixmap(0, 0, halo)
-            painter.setOpacity(1)
-            painter.drawPixmap(0, 0, rim)
-            painter.end()
-            self._logo_frames.append(composed)
-        self._logo_local_rect = QRectF(crop.x()*sx, crop.y()*sy, width, height)
+            mask = _blurred_alpha(source, width, height, blur, padding, cache_dpr)
+            self._logo_masks.append(mask)
+            self._logo_frames.append(_blank(total_w, total_h, cache_dpr))
+            self._logo_metadata.append((layer, width, height, padding, total_w, total_h))
+            self._logo_phases.append(None)
         self._logo_key = key
         self.cache_builds += 1
         return True
@@ -212,111 +220,112 @@ class WallpaperVisuals:
         if (self._star_key if star_only else self._sprite_key) == key:
             return
         if not star_only:
-            self._particle_sprites = []
-            for color in _PARTICLE_COLORS:
+            self._particle_sprites.clear()
+            particles = self.spec["particles"]
+            style = particles["sprite"]
+            for color in particles["colors"]:
                 row = []
-                for size in range(3):
-                    radius = (6.4+size*2.5)*scale
-                    core = (.9+size*.38)*scale
-                    sprite = _blank(radius*2+2, radius*2+2, dpr)
+                for size in range(style["size_count"]):
+                    radius = (style["radius_base"]+size*style["radius_step"])*scale
+                    core = (style["core_base"]+size*style["core_step"])*scale
+                    half = radius+style["padding"]
+                    sprite = _blank(half*2, half*2, dpr)
                     painter = QPainter(sprite)
                     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                    center = QPointF(radius+1, radius+1)
+                    center = QPointF(half, half)
                     gradient = QRadialGradient(center, radius)
-                    tint = QColor(color)
-                    gradient.setColorAt(0, QColor(255, 248, 255, 245))
-                    tint.setAlpha(150)
-                    gradient.setColorAt(.16, tint)
-                    tint.setAlpha(48)
-                    gradient.setColorAt(.47, tint)
-                    tint.setAlpha(0)
-                    gradient.setColorAt(1, tint)
+                    for stop in style["stops"]:
+                        tint = QColor(*stop["color"]) if "color" in stop else QColor(color)
+                        if "tint_alpha" in stop:
+                            tint.setAlpha(stop["tint_alpha"])
+                        gradient.setColorAt(stop["at"], tint)
                     painter.setPen(Qt.PenStyle.NoPen)
                     painter.setBrush(gradient)
                     painter.drawEllipse(center, radius, radius)
-                    painter.setBrush(QColor(255, 249, 255, 240))
+                    painter.setBrush(QColor(*style["core_color"]))
                     painter.drawEllipse(center, core, core)
                     painter.end()
-                    row.append((sprite, radius+1))
+                    row.append((sprite, half))
                 self._particle_sprites.append(row)
             self._sprite_key = key
             return
-        self._star_sprites = []
-        for color in ("#91ecff", "#ff9ee9", "#d4bdff"):
-            radius = 21*scale
-            sprite = _blank(radius*2+2, radius*2+2, dpr)
-            painter = QPainter(sprite)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            center = QPointF(radius+1, radius+1)
-            bloom = QRadialGradient(center, radius)
-            bloom.setColorAt(0, QColor(255, 246, 255, 245))
-            tint = QColor(color)
-            tint.setAlpha(155)
-            bloom.setColorAt(.18, tint)
-            tint.setAlpha(0)
-            bloom.setColorAt(1, tint)
-            painter.fillRect(QRectF(0, 0, radius*2+2, radius*2+2), bloom)
-            painter.translate(center)
-            # Four tapered points plus short diagonal rays, cached as a sprite.
-            star = QPainterPath()
-            star.moveTo(0, -17*scale)
-            for point in ((1.4, -1.4), (12, 0), (1.4, 1.4), (0, 17),
-                          (-1.4, 1.4), (-12, 0), (-1.4, -1.4)):
-                star.lineTo(point[0]*scale, point[1]*scale)
-            star.closeSubpath()
-            painter.fillPath(star, QColor(255, 249, 255, 245))
-            painter.setPen(QPen(QColor(color), max(.65, scale*.8)))
-            for ax, ay, bx, by in ((-5, -5, 5, 5), (-5, 5, 5, -5)):
-                painter.drawLine(QPointF(ax*scale, ay*scale), QPointF(bx*scale, by*scale))
-            painter.end()
-            self._star_sprites.append((sprite, radius+1))
+        self._star_sprites.clear()
+        shape = self.spec["logo"]["sparkles"]["shape"]
+        radius = max(abs(coordinate) for point in shape["main"] for coordinate in point)*scale
+        padding = sum(shadow["blur"] for shadow in shape["shadows"])*scale*3+2
+        half = radius+padding
+        core = _blank(half*2, half*2, dpr)
+        painter = QPainter(core)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(half, half)
+        painter.fillPath(_path(shape["main"], scale), QColor(shape["fill"]))
+        painter.save()
+        painter.rotate(shape["diagonal_rotation"])
+        painter.setOpacity(shape["diagonal_opacity"])
+        painter.fillPath(_path(shape["diagonal"], scale), QColor(shape["diagonal_fill"]))
+        painter.restore()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(shape["fill"]))
+        painter.drawEllipse(QPointF(0, 0), shape["center_radius"]*scale, shape["center_radius"]*scale)
+        painter.end()
+        sprite = _blank(half*2, half*2, dpr)
+        painter = QPainter(sprite)
+        for shadow in reversed(shape["shadows"]):
+            blurred = _blurred_alpha(core, half*2, half*2, shadow["blur"]*scale, 0, dpr)
+            sp = QPainter(blurred)
+            sp.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            sp.fillRect(QRectF(0, 0, half*2, half*2), QColor(shadow["color"]))
+            sp.end()
+            painter.drawPixmap(0, 0, blurred)
+        painter.drawPixmap(0, 0, core)
+        painter.end()
+        self._star_sprites.append((sprite, half))
         self._star_key = key
 
     def paint_logo(self, painter: QPainter, target: QRectF, phase: float,
                    strength: float = .85, dpr: float = 1.0):
         strength = min(1.0, max(0.0, strength))
-        if strength == 0 or not self._ensure_logo(target, dpr):
+        device = painter.device()
+        viewport_width = device.width()/device.devicePixelRatioF() if isinstance(device, QPixmap) else device.width()
+        if strength == 0 or not self._ensure_logo(target, dpr, viewport_width):
             return
-        scale = target.width()/1920
-        self._ensure_sprites(max(.25, scale), dpr, star_only=True)
-        # Cross-fade three already shaded gradients: no mask or big allocation in
-        # the animation path. SourceOver preserves saturated halo colours.
-        step = phase*.24
-        first = math.floor(step) % len(self._logo_frames)
-        blend = step-math.floor(step)
-        breath = .88+.10*math.sin(phase*.92)+.02*math.sin(phase*5.8)
-        origin = target.topLeft()+self._logo_local_rect.topLeft()
+        canvas_w, canvas_h = self.spec["logo"]["canvas"]
+        self._ensure_sprites(max(.025, target.width()/canvas_w), dpr, star_only=True)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        painter.setOpacity(strength*breath*(1-blend))
-        painter.drawPixmap(origin, self._logo_frames[first])
-        painter.setOpacity(strength*breath*blend)
-        painter.drawPixmap(origin, self._logo_frames[(first+1) % len(self._logo_frames)])
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        sx, sy = target.width()/3840, target.height()/2160
-        for index, track in enumerate(self._tracks):
-            distance = (phase*(91+index*9)+index*237) % track.total
-            # A short sweep travels exactly along the VI's existing strokes.
-            for piece in range(9, 0, -1):
-                tail = distance-piece*12
-                if tail < 0:
-                    continue
-                a, b = track.point(tail), track.point(tail+12)
-                fade = (1-piece/10)**1.6
-                tint = QColor(_PALETTE[(index+first) % len(_PALETTE)])
-                tint.setAlpha(round(210*fade))
-                painter.setOpacity(strength)
-                painter.setPen(QPen(tint, max(1.1, 3.6*scale),
-                                    Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                painter.drawLine(QPointF(target.x()+a[0]*sx, target.y()+a[1]*sy),
-                                 QPointF(target.x()+b[0]*sx, target.y()+b[1]*sy))
-            x, y = track.point(distance)
-            star, half = self._star_sprites[index]
-            sparkle = .66+.34*(.5+.5*math.sin(phase*(2.1+index*.3)+index*1.5))**3
-            painter.setOpacity(strength*sparkle)
-            painter.drawPixmap(QPointF(target.x()+x*sx-half, target.y()+y*sy-half), star)
+        origin = target.topLeft()+self._logo_local_rect.topLeft()
+        for index, (layer, width, height, padding, total_w, total_h) in enumerate(self._logo_metadata):
+            state = logo_state(phase, layer["name"], strength, self.spec)
+            buffer = self._logo_frames[index]
+            if self._logo_phases[index] != phase:
+                buffer.fill(Qt.GlobalColor.transparent)
+                bp = QPainter(buffer)
+                bp.fillRect(QRectF(0, 0, total_w, total_h),
+                            _css_gradient(width, height, padding, state["flow"], self.spec["logo"]["flow"], layer))
+                bp.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+                # Qt's point overload does not consistently expand pixmaps
+                # with DPR below one. Give both the mask and output their
+                # explicit logical destination to keep low-memory layers aligned.
+                bp.drawPixmap(QRectF(0, 0, total_w, total_h),
+                              self._logo_masks[index], QRectF(self._logo_masks[index].rect()))
+                bp.end()
+                self._logo_phases[index] = phase
+            painter.setOpacity(state["opacity"])
+            painter.drawPixmap(QRectF(origin.x()-padding, origin.y()-padding, total_w, total_h),
+                               buffer, QRectF(buffer.rect()))
+        star, half = self._star_sprites[0]
+        for state in sparkle_states(phase, strength, self.spec):
+            # All sixteen positions stay fixed on the original outline. Only
+            # the SVG-equivalent scale, rotation, and opacity change with time.
+            painter.save()
+            painter.translate(target.x()+state["x"]*target.width()/canvas_w,
+                              target.y()+state["y"]*target.height()/canvas_h)
+            painter.rotate(state["rotate_deg"])
+            painter.scale(state["scale"], state["scale"])
+            painter.setOpacity(state["opacity"])
+            painter.drawPixmap(QPointF(-half, -half), star)
+            painter.restore()
         painter.restore()
 
     def paint_particles(self, painter: QPainter, width: float, height: float,
@@ -324,26 +333,20 @@ class WallpaperVisuals:
         strength = min(1.0, max(0.0, strength))
         if strength == 0 or width <= 0 or height <= 0:
             return
-        scale = max(.25, min(width/1920, height/1080))
+        style = self.spec["particles"]
+        reference_w, reference_h = style["scale"]["reference"]
+        scale = max(style["scale"]["minimum"], min(width/reference_w, height/reference_h))
         self._ensure_sprites(scale, dpr)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
-        for x, y, size, color, speed, offset, twinkle in self._particles:
-            px = ((x+.010*math.sin(phase*.24+offset)) % 1)*width
-            py = ((y-phase*speed*.34) % 1)*height
-            alpha = (.43+.42*(.5+.5*math.sin(phase*twinkle+offset)))*strength
-            # The faint downward tail makes the upward drift readable without
-            # turning the particles into a rain overlay.
-            tint = QColor(_PARTICLE_COLORS[color])
-            tint.setAlpha(83)
-            painter.setOpacity(alpha*.75)
-            painter.setPen(QPen(tint, max(.65, (.7+size*.2)*scale),
+        for state in particle_states(phase, width, height, strength, self.spec):
+            color, size, tail = state["color"], state["size"], state["tail"]
+            painter.setOpacity(tail["alpha"])
+            painter.setPen(QPen(QColor(style["colors"][color]), tail["width"],
                                 Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            painter.drawLine(QPointF(px, py+scale),
-                             QPointF(px-1.8*scale*math.cos(phase*.24+offset),
-                                     py+(4.5+size*2.4)*scale))
+            painter.drawLine(QPointF(tail["x1"], tail["y1"]), QPointF(tail["x2"], tail["y2"]))
             sprite, half = self._particle_sprites[color][size]
-            painter.setOpacity(alpha)
-            painter.drawPixmap(QPointF(px-half, py-half), sprite)
+            painter.setOpacity(state["alpha"])
+            painter.drawPixmap(QPointF(state["x"]-half, state["y"]-half), sprite)
         painter.restore()
