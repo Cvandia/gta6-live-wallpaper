@@ -3,18 +3,18 @@
   "use strict";
   // Coordinates use the complete characters.png canvas, with Y increasing downward.
   const regions = [
-    [.555, .198, .046, .105, 3.6, 1.0, 1.65, .2], // Lucia's ponytail
-    [.486, .290, .035, .060, 3.0, 1.2, 1.90, 1.1], // loose hair ends
-    [.711, .047, .044, .033, 1.2, .45, 1.50, 2.0], // Jason's hair
-    [.437, .419, .059, .064, 1.4, 1.5, .92, .6], // bent forearm
-    [.629, .554, .027, .168, 2.0, .75, .83, 1.4], // lowered forearm
-    [.616, .259, .043, .112, 1.2, .65, .79, 2.3], // raised arm
-    [.822, .257, .045, .103, 1.2, .65, .79, 2.3],
-    [.554, .457, .057, .078, 1.0, 1.4, 1.03, .4], // shirt hem
-    [.718, .459, .065, .139, 1.3, 1.8, .88, 1.7] // shirt folds
+    [.555, .198, .046, .105, 10.0, 2.4, 1.65, .2], // Lucia's ponytail
+    [.486, .290, .035, .060, 8.0, 3.2, 1.90, 1.1], // loose hair ends
+    [.711, .047, .044, .033, 2.8, 1.0, 1.50, 2.0], // Jason's hair
+    [.437, .419, .059, .064, 4.5, 4.0, .92, .6], // bent forearm
+    [.629, .554, .027, .168, 6.0, 2.0, .83, 1.4], // lowered forearm
+    [.616, .259, .043, .112, 3.5, 1.8, .79, 2.3], // raised arm
+    [.822, .257, .045, .103, 3.5, 1.8, .79, 2.3],
+    [.554, .457, .057, .078, 3.0, 3.6, 1.03, .4], // shirt hem
+    [.718, .459, .065, .139, 3.6, 4.5, .88, 1.7] // shirt folds
   ];
   const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
-  function displacement(x, y, phase, strength = 55) {
+  function displacement(x, y, phase, strength = 70) {
     let dx = 0, dy = 0;
     const facePin = smooth((Math.hypot((x - .52) / .031, (y - .205) / .057) - .9) / .35)
       * smooth((Math.hypot((x - .713) / .032, (y - .108) / .052) - .9) / .35);
@@ -55,7 +55,7 @@
     if (!gl) return null;
     let program, buffer, texture, timeLocation, strengthLocation;
     let ready = false, lost = false, frame = null, previous = null, phase = 0;
-    let enabled = false, paused = false, strength = 55, fixedPhase = null;
+    let enabled = false, paused = false, strength = 70, fixedPhase = null;
     function compile(type, source) {
       const shader = gl.createShader(type);
       gl.shaderSource(shader, source); gl.compileShader(shader);

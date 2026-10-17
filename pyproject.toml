@@ -1,6 +1,6 @@
 [project]
 name = "gta6-live-wallpaper"
-version = "1.4.0"
+version = "1.4.1"
 description = "GTA VI Beijing countdown wallpaper with neon glow and mouse parallax"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"

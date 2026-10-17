@@ -68,9 +68,9 @@
       "parallax": {
         "index": 7,
         "order": 7,
-        "text": "人物跟随鼠标左右轻移",
+        "text": "额外鼠标视差（人物自动动作不依赖此项）",
         "type": "bool",
-        "value": true
+        "value": false
       },
       "parallaxstrength": {
         "index": 8,
@@ -142,7 +142,7 @@
         "order": 15,
         "text": "人物动作幅度（%）",
         "type": "slider",
-        "value": 55,
+        "value": 70,
         "min": 0,
         "max": 100,
         "step": 1,

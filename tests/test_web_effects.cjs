@@ -87,6 +87,8 @@ async function main() {
 
   const page = browser();
   page.initialize();
+  eq(page.styles["--parallax-x"], "0.000px", "mouse parallax is off by default");
+  page.listener.applyUserProperties({ parallax: { value: true } });
   eq(page.styles["--glow-opacity"], "0.85", "new wallpapers default to the brighter neon level");
   eq(page.images.length, 3, "only the complete foreground/background/logo set enables layering");
   page.move(1920);
@@ -153,7 +155,7 @@ async function main() {
   eq(page.styles["--parallax-x"], "0.000px", "leaving the desktop gently recenters the artwork");
 
   const defaultReduced = browser(true);
-  defaultReduced.initialize(); await defaultReduced.load(); defaultReduced.move(1920); defaultReduced.settle();
+  defaultReduced.initialize(); defaultReduced.listener.applyUserProperties({ parallax: { value: true } }); await defaultReduced.load(); defaultReduced.move(1920); defaultReduced.settle();
   eq(defaultReduced.classes.get("reduced-motion"), false, "system reduce present at startup does not override explicitly requested dynamic wallpaper");
   eq(defaultReduced.styles["--parallax-x"], "12.000px", "the default remains animated in browsers that emulate reduced motion");
   defaultReduced.listener.applyUserProperties({ respectreducedmotion: { value: true } });

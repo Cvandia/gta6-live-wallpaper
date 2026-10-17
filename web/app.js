@@ -169,7 +169,7 @@
   let particleWidth = 0, particleHeight = 0, particleRatio = 1;
   let spriteKey = null, particleSprites = [];
   api.getParticlePhase = () => particlePhase;
-  const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: true, parallaxstrength: 12, neon: true, glowstrength: 85, respectreducedmotion: false, charactermotion: true, charactermotionstrength: 55, particles: true, particlecount: 64, particlebrightness: 85, particlespeed: 100 };
+  const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: false, parallaxstrength: 12, neon: true, glowstrength: 85, respectreducedmotion: false, charactermotion: true, charactermotionstrength: 70, particles: true, particlecount: 64, particlebrightness: 85, particlespeed: 100 };
 
   function cacheElements() {
     elements = {};
@@ -412,7 +412,7 @@
 
   function loadSceneLayers() {
     if (typeof root.Image !== "function") return;
-    const sources = ["assets/scene-background.jpg", "assets/characters.png", "assets/logo-mask.png"];
+    const sources = ["assets/scene-background.jpg", root.GTA6_CHARACTER_TEXTURE || "assets/characters.png", "assets/logo-mask.png"];
     const load = source => new Promise((resolve, reject) => {
       const image = new root.Image();
       image.onload = () => resolve(image);

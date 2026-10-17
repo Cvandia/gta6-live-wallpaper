@@ -47,7 +47,7 @@ Release 提供 EXE、完整 ZIP 与 Web ZIP。GitHub Actions 会在推送到 `ma
 
 ### EXE 版
 
-下载并解压完整 `GTA6-LiveWallpaper-v1.4.0.zip`，双击 `GTA6Wallpaper.exe` 即可预览。支持 Windows 10 / 11 x64。
+下载并解压完整 `GTA6-LiveWallpaper-v1.4.1.zip`，双击 `GTA6Wallpaper.exe` 即可预览。支持 Windows 10 / 11 x64。
 
 在窗口内右键选择 **“独立设为桌面壁纸”**，可将壁纸放到主屏桌面图标后面。右键托盘的 **VI** 图标可打开设置、返回预览或退出。
 
@@ -60,7 +60,7 @@ Release 提供 EXE、完整 ZIP 与 Web ZIP。GitHub Actions 会在推送到 `ma
 | EXE | `GTA6Wallpaper.exe` | 在“创建壁纸”中按应用程序导入 |
 | Web | `WallpaperEngine-Web/index.html` | 在“创建壁纸”中导入网页入口，保持整个文件夹完整 |
 
-Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.4.0.zip`，在引擎右侧调节属性；EXE 版通过右键菜单或托盘打开设置。独立桌面模式与 Wallpaper Engine 模式选择一种运行即可。
+Web 版可单独下载 `GTA6-WallpaperEngine-Web-v1.4.1.zip`，在引擎右侧调节属性；EXE 版通过右键菜单或托盘打开设置。独立桌面模式与 Wallpaper Engine 模式选择一种运行即可。
 
 ## ⚙️ 设置
 
@@ -81,7 +81,7 @@ EXE 限制绘图位图缓存的数量与大小，按当前显示大小加载绘�
 
 **内存实测：v1.2.0 在增强光效的同时降低了内存占用。**
 
-以下为 v1.2.0 内存优化时的对照数据，并非 v1.4.0 的复测结果。
+以下为 v1.2.0 内存优化时的对照数据，并非 v1.4.1 的复测结果。
 
 | 画面尺寸 | v1.1.1 私有提交内存 | v1.2.0 私有提交内存 | 降低约 |
 | --- | ---: | ---: | ---: |
@@ -147,10 +147,10 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 输出文件：
 
 - `dist/GTA6Wallpaper.exe`：内置素材、Python 与 Qt 运行库的单文件程序
-- `dist/GTA6-LiveWallpaper-v1.4.0.zip`：EXE、完整 Web 壁纸、说明与第三方许可
-- `dist/GTA6-WallpaperEngine-Web-v1.4.0.zip`：完整网页壁纸与素材
+- `dist/GTA6-LiveWallpaper-v1.4.1.zip`：EXE、完整 Web 壁纸、说明与第三方许可
+- `dist/GTA6-WallpaperEngine-Web-v1.4.1.zip`：完整网页壁纸与素材
 
-GitHub Actions 在推送到 `main` 或手动运行后执行锁定依赖安装、Python / Web 测试及打包，并保存构建产物；首次成功构建会创建 `v1.4.0` Release。
+GitHub Actions 在推送到 `main` 或手动运行后执行锁定依赖安装、Python / Web 测试及打包，并保存构建产物；首次成功构建会创建 `v1.4.1` Release。
 
 ## 📂 项目结构
 
@@ -213,8 +213,12 @@ Web 测试需要 Node.js。Windows 原生窗口嵌入测试另见 `tests/test_em
 
 ### Web 人物轻微动作
 
-在 Wallpaper Engine 属性中开启“人物轻微动作（手臂、头发、衣服）”，用“人物动作幅度（%）”调节，默认 55%。动作使用现有人物透明图的局部连续形变，包含手臂微摆、发梢飘动和衣料起伏；面部和双腿固定，与鼠标视差叠加。幅度设为 0 或关闭动态总开关时恢复原图。宿主暂停、桌面隐藏或启用系统减少动态偏好时停止动画。
+在 Wallpaper Engine 属性中开启“人物轻微动作（手臂、头发、衣服）”，用“人物动作幅度（%）”调节，默认 70%。动作使用现有人物透明图的局部连续形变，包含手臂微摆、发梢飘动和衣料起伏；面部和双腿固定，与鼠标视差叠加。幅度设为 0 或关闭动态总开关时恢复原图。宿主暂停、桌面隐藏或启用系统减少动态偏好时停止动画。
 
 仅 Web 版使用此效果；浏览器不支持 WebGL 时自动使用原静态人物图层。渲染使用单张纹理，画布上限 1920×1080，不生成逐帧图片或视频。它是 2D 局部形变，不是骨骼动画或新的角色姿势。
 
 Web 版已发布到 [Steam 创意工坊](https://steamcommunity.com/sharedfiles/filedetails/?id=3820814173)。本次人物动作更新已同步本地项目；创意工坊下载内容以该页面最近更新时间为准。
+
+### 本地人物动画兼容修复（v1.4.1）
+
+人物自动动作独立于鼠标持续播放；额外鼠标视差默认关闭。使用 `character-texture.js` 内嵌同一张透明 PNG，避免 `file://` 的图片源被拒绝上传到 WebGL。准备工具自动生成该脚本，无需关闭浏览器安全功能或启动本地服务器。已实测 file 协议下的纹理加载、鼠标静止时相位推进、鼠标移动时整体偏移为 0、暂停和恢复。人物动作默认幅度为 70%，可在 Wallpaper Engine 属性中调整。

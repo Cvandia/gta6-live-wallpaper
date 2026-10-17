@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import base64
 import shutil
 
 
@@ -34,6 +35,13 @@ def prepare_web_assets() -> int:
     # A classic local script also works under file://, unlike fetch() of a JSON file.
     (PROJECT_ROOT / "web" / "effects-data.js").write_text(
         "window.GTA6_EFFECTS_SPEC = " + json.dumps(spec, ensure_ascii=False, separators=(",", ":")) + ";\n",
+        encoding="utf-8", newline="\n",
+    )
+    # file:// has an opaque origin: embed the existing PNG for WebGL texture upload.
+    # This avoids disabling browser security or requiring a localhost server in Wallpaper Engine.
+    texture = base64.b64encode((assets / "characters.png").read_bytes()).decode("ascii") if (assets / "characters.png").is_file() else ""
+    (PROJECT_ROOT / "web" / "character-texture.js").write_text(
+        'window.GTA6_CHARACTER_TEXTURE = "data:image/png;base64,' + texture + '";\n',
         encoding="utf-8", newline="\n",
     )
     return copied
