@@ -7,12 +7,13 @@
   <title>GTA VI · 欢迎来到莱昂尼达</title>
   <link rel="stylesheet" href="style.css">
   <script src="effects-data.js" defer></script>
+  <script src="character-motion.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
   <main class="wallpaper" aria-label="GTA VI 发售日倒计时壁纸">
     <div class="backdrop" aria-hidden="true"></div>
-    <div class="characters" id="characters" aria-hidden="true"></div>
+    <div class="characters" id="characters" aria-hidden="true"><canvas id="character-motion" class="character-motion"></canvas></div>
     <div class="logo-glow" aria-hidden="true">
       <div class="logo-glow__aura"></div><div class="logo-glow__halo"></div><div class="logo-glow__edge"></div>
       <svg class="logo-sparkles" viewBox="0 0 3840 2160" aria-hidden="true">

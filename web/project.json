@@ -89,6 +89,64 @@
         "text": "跟随系统减少动态偏好",
         "type": "bool",
         "value": false
+      },
+      "particles": {
+        "index": 10,
+        "order": 10,
+        "text": "显示漂浮粒子",
+        "type": "bool",
+        "value": true
+      },
+      "particlecount": {
+        "index": 11,
+        "order": 11,
+        "text": "粒子数量",
+        "type": "slider",
+        "value": 64,
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "precision": 0
+      },
+      "particlebrightness": {
+        "index": 12,
+        "order": 12,
+        "text": "粒子亮度（%）",
+        "type": "slider",
+        "value": 85,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "precision": 0
+      },
+      "particlespeed": {
+        "index": 13,
+        "order": 13,
+        "text": "粒子移动速度（%，0 为静止）",
+        "type": "slider",
+        "value": 100,
+        "min": 0,
+        "max": 300,
+        "step": 1,
+        "precision": 0
+      },
+      "charactermotion": {
+        "index": 14,
+        "order": 14,
+        "text": "人物轻微动作（手臂、头发、衣服）",
+        "type": "bool",
+        "value": true
+      },
+      "charactermotionstrength": {
+        "index": 15,
+        "order": 15,
+        "text": "人物动作幅度（%）",
+        "type": "slider",
+        "value": 55,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "precision": 0
       }
     },
     "supportsaudioprocessing": false

@@ -155,6 +155,8 @@
   let timer = null;
   let elements = null;
   let layersReady = false;
+  let characterMotion = null;
+  api.getCharacterPhase = () => characterMotion ? characterMotion.getPhase() : null;
   let systemReducedMotion = false;
   let reducedMotion = false;
   let frame = null;
@@ -167,7 +169,7 @@
   let particleWidth = 0, particleHeight = 0, particleRatio = 1;
   let spriteKey = null, particleSprites = [];
   api.getParticlePhase = () => particlePhase;
-  const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: true, parallaxstrength: 12, neon: true, glowstrength: 85, respectreducedmotion: false };
+  const options = { effects: true, showclock: true, accent: "#ff25c2", textscale: 100, parallax: true, parallaxstrength: 12, neon: true, glowstrength: 85, respectreducedmotion: false, charactermotion: true, charactermotionstrength: 55, particles: true, particlecount: 64, particlebrightness: 85, particlespeed: 100 };
 
   function cacheElements() {
     elements = {};
@@ -208,6 +210,7 @@
     document.body.classList.toggle("is-paused", paused);
     syncMotion();
     syncParticles();
+    syncCharacterMotion();
     if (paused) return;
     tick();
     timer = root.setTimeout(scheduleTick, 1000 - (Date.now() % 1000) + 8);
@@ -225,6 +228,7 @@
     document.documentElement.style.setProperty("--glow-opacity", String(options.glowstrength / 100));
     syncMotion();
     syncParticles();
+    syncCharacterMotion();
     tick();
     freezePreviewEffects();
   }
@@ -280,8 +284,9 @@
     clearParticles();
     particleContext.globalCompositeOperation = particleSpec.composition === "plus" ? "lighter" : particleSpec.composition;
     particleContext.lineCap = particleSpec.trail.cap;
-    for (const seed of particleSpec.seeds) {
-      const state = particleState(seed, particleWidth, particleHeight, particlePhase, particleSpec.default_strength, particleSpec);
+    for (let index = 0; index < options.particlecount; index++) {
+      const seed = particleSpec.seeds[index];
+      const state = particleState(seed, particleWidth, particleHeight, particlePhase, options.particlebrightness / 100, particleSpec);
       const tail = state.tail;
       particleContext.globalAlpha = tail.alpha;
       particleContext.strokeStyle = particleSpec.colors[state.color];
@@ -305,17 +310,21 @@
     particleCanvas.width = size.width; particleCanvas.height = size.height;
     particleContext.setTransform(size.width / width, 0, 0, size.height / height, 0, 0);
     spriteKey = null;
-    if (options.effects && !reducedMotion) drawParticles();
+    if (particlesVisible()) drawParticles();
+  }
+
+  function particlesVisible() {
+    return options.effects && options.particles && options.particlecount > 0 && options.particlebrightness > 0 && !reducedMotion;
   }
 
   function canAnimateParticles() {
-    return particleContext && options.effects && !reducedMotion && !pausedByHost && !document.hidden;
+    return particleContext && particlesVisible() && !pausedByHost && !document.hidden;
   }
 
   function animateParticles(timestamp) {
     particleFrame = null;
-    if (!canAnimateParticles() || previewPhase !== null) return;
-    if (particlePrevious !== null) particlePhase += Math.min(.1, Math.max(0, (timestamp - particlePrevious) / 1000));
+    if (!canAnimateParticles() || previewPhase !== null || options.particlespeed === 0) return;
+    if (particlePrevious !== null) particlePhase += Math.min(.1, Math.max(0, (timestamp - particlePrevious) / 1000)) * options.particlespeed / 100;
     particlePrevious = timestamp;
     drawParticles();
     particleFrame = root.requestAnimationFrame(animateParticles);
@@ -323,11 +332,11 @@
 
   function syncParticles() {
     if (!particleContext) return;
-    if (!canAnimateParticles() || previewPhase !== null) {
+    if (!canAnimateParticles() || previewPhase !== null || options.particlespeed === 0) {
       if (particleFrame !== null) root.cancelAnimationFrame(particleFrame);
       particleFrame = null; particlePrevious = null;
-      if (!options.effects || reducedMotion) clearParticles();
-      else if (previewPhase !== null && !pausedByHost && !document.hidden) drawParticles();
+      if (!particlesVisible()) clearParticles();
+      else if (!pausedByHost && !document.hidden) drawParticles();
       return;
     }
     if (particleFrame === null && typeof root.requestAnimationFrame === "function") particleFrame = root.requestAnimationFrame(animateParticles);
@@ -342,6 +351,15 @@
     particleSpec = spec.particles; particleCanvas = canvas; particleContext = context;
     particlePhase = previewPhase === null ? spec.initial_phase : previewPhase;
     resizeParticles();
+  }
+
+  function syncCharacterMotion() {
+    if (characterMotion) characterMotion.sync({
+      enabled: layersReady && options.effects && options.charactermotion && !reducedMotion,
+      strength: options.charactermotionstrength,
+      paused: pausedByHost || document.hidden,
+      previewPhase
+    });
   }
 
   function canMove() {
@@ -405,10 +423,16 @@
       // Full-canvas assets share original 16:9 coordinates, with slight rounding allowed for extracted images.
       // CSS gives every layer exactly the same target rectangle instead of covering from its own natural size.
       if (!images.every(image => image.naturalWidth > 0 && image.naturalHeight > 0 && Math.abs(image.naturalWidth / image.naturalHeight / (16 / 9) - 1) < .01)) return;
+      if (root.GTAVICharacterMotion) {
+        try {
+          characterMotion = root.GTAVICharacterMotion.create(document.getElementById("character-motion"), document.getElementById("characters"), images[1]);
+        } catch (_) { characterMotion = null; }
+      }
       layersReady = true;
       document.body.classList.toggle("is-layered", true);
       document.body.classList.toggle("has-logo-mask", true);
       syncMotion();
+      syncCharacterMotion();
       freezePreviewEffects();
     }).catch(() => {
       // The static original is already visible, so missing layers never create a blank wallpaper.
@@ -417,6 +441,8 @@
 
   function applyUserProperties(properties) {
     if (!properties || typeof properties !== "object") return;
+    if (properties.charactermotion) options.charactermotion = Boolean(properties.charactermotion.value);
+    if (properties.particles) options.particles = Boolean(properties.particles.value);
     if (properties.effects) options.effects = Boolean(properties.effects.value);
     if (properties.showclock) options.showclock = Boolean(properties.showclock.value);
     if (properties.parallax) options.parallax = Boolean(properties.parallax.value);
@@ -427,10 +453,10 @@
       const value = Number(properties.textscale.value);
       if (Number.isFinite(value)) options.textscale = clamp(value, 70, 125);
     }
-    for (const [name, maximum] of [["parallaxstrength", 25], ["glowstrength", 100]]) {
+    for (const [name, maximum] of [["charactermotionstrength", 100], ["parallaxstrength", 25], ["glowstrength", 100], ["particlecount", particleSpec ? particleSpec.seeds.length : 64], ["particlebrightness", 100], ["particlespeed", 300]]) {
       if (properties[name]) {
         const value = Number(properties[name].value);
-        if (Number.isFinite(value)) options[name] = clamp(value, 0, maximum);
+        if (Number.isFinite(value)) options[name] = name === "particlecount" ? Math.floor(clamp(value, 0, maximum)) : clamp(value, 0, maximum);
       }
     }
     if (properties.targetdate) {
@@ -473,7 +499,7 @@
       syncMotion();
     }, { passive: true });
     document.addEventListener("mouseleave", () => { mouseRatio = 0; syncMotion(); });
-    if (typeof root.addEventListener === "function") root.addEventListener("resize", () => { updateSceneGeometry(); resizeParticles(); syncMotion(); syncParticles(); freezePreviewEffects(); }, { passive: true });
+    if (typeof root.addEventListener === "function") root.addEventListener("resize", () => { updateSceneGeometry(); resizeParticles(); syncMotion(); syncParticles(); syncCharacterMotion(); freezePreviewEffects(); }, { passive: true });
     loadSceneLayers();
     scheduleTick();
   }

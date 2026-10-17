@@ -138,6 +138,32 @@ async function main() {
   preview.frame(9000); eq(preview.window.GTAVIWallpaper.getParticlePhase(), 2);
   const normal = browser(); normal.initialize(); eq(normal.animation.pauses, 0, "ordinary wallpaper URLs do not freeze CSS effects");
 
+  const configurable = browser(); configurable.initialize();
+  configurable.listener.applyUserProperties({ particlecount: { value: 12.9 }, particlebrightness: { value: 50 } });
+  configurable.particleContext.draws.length = 0;
+  configurable.frame();
+  eq(configurable.particleContext.draws.length, 12, "count is rounded down and applied without rebuilding sprites");
+  ok(configurable.particleContext.draws.every(draw => draw.alpha <= .5), "brightness updates alpha");
+  eq(configurable.sprites.length, 12);
+  configurable.listener.applyUserProperties({ particlespeed: { value: 0 } });
+  eq(configurable.frames.size, 0, "static particles do not schedule animation");
+  const staticPhase = configurable.window.GTAVIWallpaper.getParticlePhase();
+  configurable.frame(500); near(configurable.window.GTAVIWallpaper.getParticlePhase(), staticPhase);
+  configurable.listener.applyUserProperties({ particlespeed: { value: 200 } });
+  configurable.frame(); configurable.frame(50);
+  near(configurable.window.GTAVIWallpaper.getParticlePhase() - staticPhase, .1, "200% speed doubles elapsed phase");
+  for (const property of ["particles", "particlecount", "particlebrightness"]) {
+    configurable.listener.applyUserProperties({ [property]: { value: property === "particles" ? false : 0 } });
+    eq(configurable.frames.size, 0, `${property} can independently stop the renderer`);
+    configurable.listener.applyUserProperties({ particles: { value: true }, particlecount: { value: 64 }, particlebrightness: { value: 85 } });
+    eq(configurable.frames.size, 1);
+  }
+  configurable.listener.applyUserProperties({ particlecount: { value: 999 }, particlebrightness: { value: "invalid" } });
+  configurable.particleContext.draws.length = 0; configurable.frame();
+  eq(configurable.particleContext.draws.length, 64, "count cannot exceed the seed pool");
+  const properties = JSON.parse(fs.readFileSync(path.join(webRoot, "project.json"), "utf8")).general.properties;
+  for (const [name, value] of Object.entries({ particles: true, particlecount: 64, particlebrightness: 85, particlespeed: 100 })) eq(properties[name].value, value);
+
   const generated = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(webRoot, "effects-data.js"), "utf8"), generated);
   eq(plain(generated.window.GTA6_EFFECTS_SPEC), spec, "the tracked offline script is synchronized with the shared source JSON");

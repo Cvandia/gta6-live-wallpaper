@@ -50,6 +50,9 @@ body {
   will-change: transform;
 }
 .is-layered .characters { display: block; }
+.character-motion { display: none; position: absolute; left: var(--scene-anchor-x); top: var(--scene-anchor-y); width: var(--scene-width); height: var(--scene-height); transform: translate(calc(0% - var(--scene-anchor-x)), calc(0% - var(--scene-anchor-y))); }
+.characters.character-animated { background-image: none; }
+.character-animated .character-motion { display: block; }
 .logo-glow { z-index: -4; display: none; pointer-events: none; }
 .has-logo-mask .logo-glow { display: block; }
 .logo-glow__aura, .logo-glow__halo, .logo-glow__edge {
